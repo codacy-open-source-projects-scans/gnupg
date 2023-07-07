@@ -74,8 +74,7 @@ void gnupg_sleep (unsigned int seconds);
 void gnupg_usleep (unsigned int usecs);
 int translate_sys2libc_fd (gnupg_fd_t fd, int for_write);
 int translate_sys2libc_fd_int (int fd, int for_write);
-gpg_error_t gnupg_sys2libc_fdstr (const char *fdstr, int for_write,
-                                  gnupg_fd_t *r_hd, int *r_fd);
+gpg_error_t gnupg_parse_fdstr (const char *fdstr, es_syshd_t *r_syshd);
 int check_special_filename (const char *fname, int for_write, int notranslate);
 FILE *gnupg_tmpfile (void);
 void gnupg_reopen_std (const char *pgmname);
@@ -112,7 +111,7 @@ int gnupg_inotify_has_name (int fd, const char *name);
 
 
 #ifdef HAVE_W32_SYSTEM
-void gnupg_w32_set_errno (int ec);
+int gnupg_w32_set_errno (int ec);
 void *w32_get_user_sid (void);
 
 #include "../common/w32help.h"

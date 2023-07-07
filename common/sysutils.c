@@ -327,9 +327,10 @@ map_w32_to_errno (DWORD w32_err)
 #endif /*HAVE_W32_SYSTEM*/
 
 
-/* Set ERRNO from the Windows error.  EC may be -1 to use the last error.  */
+/* Set ERRNO from the Windows error.  EC may be -1 to use the last
+ * error.  Returns the Windows error code.  */
 #ifdef HAVE_W32_SYSTEM
-void
+int
 gnupg_w32_set_errno (int ec)
 {
   /* FIXME: Replace by gpgrt_w32_set_errno.  */
@@ -557,17 +558,15 @@ translate_sys2libc_fd (gnupg_fd_t fd, int for_write)
 }
 
 /* This is the same as translate_sys2libc_fd but takes an integer
-   which is assumed to be such an system handle.  On WindowsCE the
-   passed FD is a rendezvous ID and the function finishes the pipe
-   creation. */
+   which is assumed to be such an system handle.   */
 int
 translate_sys2libc_fd_int (int fd, int for_write)
 {
 #ifdef HAVE_W32_SYSTEM
   if (fd <= 2)
-    return fd;	/* Do not do this for error, stdin, stdout, stderr. */
+    return fd;	/* Do not do this for stdin, stdout, and stderr.  */
 
-  return translate_sys2libc_fd ((void*)fd, for_write);
+  return translate_sys2libc_fd ((void*)(intptr_t)fd, for_write);
 #else
   (void)for_write;
   return fd;
@@ -584,20 +583,11 @@ translate_sys2libc_fd_int (int fd, int for_write)
  *  (2) Integer representation (by %d of printf).
  *  (3) Hex representation which starts as "0x".
  *
- * FOR_WRITE is 1 for a file for writing, 0 otherwise.
- *
- * There are two use cases for the function:
- *
- * - R_HD != NULL, R_FD == NULL:
- *   Return the value in *R_HD.
- *
- * - R_HD == NULL, R_FD != NULL:
- *   Return the value in *R_FD, after translating to a file descriptor.
+ * Then, fill R_SYSHD, according to the value of a file reference.
  *
  */
 gpg_error_t
-gnupg_sys2libc_fdstr (const char *fdstr, int for_write,
-                      gnupg_fd_t *r_hd, int *r_fd)
+gnupg_parse_fdstr (const char *fdstr, es_syshd_t *r_syshd)
 {
   int fd = -1;
 #ifdef HAVE_W32_SYSTEM
@@ -614,10 +604,8 @@ gnupg_sys2libc_fdstr (const char *fdstr, int for_write,
 
   if (fd >= 0)
     {
-      if (r_hd)
-        *r_hd = (gnupg_fd_t)(uintptr_t)fd;
-      else if (r_fd)
-        *r_fd = fd;
+      r_syshd->type = ES_SYSHD_FD;
+      r_syshd->u.fd = fd;
       return 0;
     }
 
@@ -638,18 +626,13 @@ gnupg_sys2libc_fdstr (const char *fdstr, int for_write,
   if (errno != 0 || endptr == fdstr || *endptr != '\0')
     return gpg_error (GPG_ERR_INV_ARG);
 
-  if (r_hd)
-    *r_hd = hd;
-  else if (r_fd)
-    *r_fd = translate_sys2libc_fd (hd, for_write);
+  r_syshd->type = ES_SYSHD_HANDLE;
+  r_syshd->u.handle = hd;
   return 0;
 #else
-  (void)for_write;
   fd = atoi (fdstr);
-  if (r_hd)
-    *r_hd = fd;
-  else if (r_fd)
-    *r_fd = fd;
+  r_syshd->type = ES_SYSHD_FD;
+  r_syshd->u.fd = fd;
   return 0;
 #endif
 }
@@ -672,8 +655,27 @@ check_special_filename (const char *fname, int for_write, int notranslate)
       for (i=0; digitp (fname+i); i++ )
         ;
       if (!fname[i])
-        return notranslate? atoi (fname)
-          /**/            : translate_sys2libc_fd_int (atoi (fname), for_write);
+        {
+          if (notranslate)
+            return atoi (fname);
+          else
+            {
+              es_syshd_t syshd;
+
+              if (gnupg_parse_fdstr (fname,  &syshd))
+                return -1;
+
+#ifdef HAVE_W32_SYSTEM
+              if (syshd.type == ES_SYSHD_FD)
+                return syshd.u.fd;
+              else
+                return translate_sys2libc_fd ((gnupg_fd_t)syshd.u.handle, for_write);
+#else
+              (void)for_write;
+              return syshd.u.fd;
+#endif
+            }
+        }
     }
   return -1;
 }

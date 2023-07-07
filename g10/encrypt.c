@@ -507,7 +507,8 @@ encrypt_simple (const char *filename, int mode, int use_seskey)
                  /**/             : "CFB");
     }
 
-  if ( rc || (rc = open_outfile (-1, filename, opt.armor? 1:0, 0, &out )))
+  if (rc || (rc = open_outfile (GNUPG_INVALID_FD, filename, opt.armor? 1:0,
+                                0, &out )))
     {
       iobuf_cancel (inp);
       xfree (cfx.dek);
@@ -559,12 +560,12 @@ encrypt_simple (const char *filename, int mode, int use_seskey)
 
   if ( !iobuf_is_pipe_filename (filename) && *filename && !opt.textmode )
     {
-      off_t tmpsize;
-      int overflow;
+      uint64_t tmpsize;
 
-      if ( !(tmpsize = iobuf_get_filelength(inp, &overflow))
-           && !overflow && opt.verbose)
+      tmpsize = iobuf_get_filelength(inp);
+      if (!tmpsize && opt.verbose)
         log_info(_("WARNING: '%s' is an empty file\n"), filename );
+
       /* We can't encode the length of very large files because
          OpenPGP uses only 32 bit for file sizes.  So if the
          size of a file is larger than 2^32 minus some bytes for
@@ -763,9 +764,9 @@ write_symkey_enc (STRING2KEY *symkey_s2k, aead_algo_t aead_algo,
  * not yet finished server.c.
  */
 int
-encrypt_crypt (ctrl_t ctrl, int filefd, const char *filename,
+encrypt_crypt (ctrl_t ctrl, gnupg_fd_t filefd, const char *filename,
                strlist_t remusr, int use_symkey, pk_list_t provided_keys,
-               int outputfd)
+               gnupg_fd_t outputfd)
 {
   iobuf_t inp = NULL;
   iobuf_t out = NULL;
@@ -783,7 +784,7 @@ encrypt_crypt (ctrl_t ctrl, int filefd, const char *filename,
   PK_LIST pk_list;
   int do_compress;
 
-  if (filefd != -1 && filename)
+  if (filefd != GNUPG_INVALID_FD && filename)
     return gpg_error (GPG_ERR_INV_ARG);  /* Both given.  */
 
   do_compress = !!opt.compress_algo;
@@ -814,7 +815,7 @@ encrypt_crypt (ctrl_t ctrl, int filefd, const char *filename,
 
   /* Prepare iobufs. */
 #ifdef HAVE_W32_SYSTEM
-  if (filefd == -1)
+  if (filefd == GNUPG_INVALID_FD)
     inp = iobuf_open (filename);
   else
     {
@@ -822,7 +823,7 @@ encrypt_crypt (ctrl_t ctrl, int filefd, const char *filename,
       gpg_err_set_errno (ENOSYS);
     }
 #else
-  if (filefd == -1)
+  if (filefd == GNUPG_INVALID_FD)
     inp = iobuf_open (filename);
   else
     inp = iobuf_fdopen_nc (filefd, "rb");
@@ -840,8 +841,8 @@ encrypt_crypt (ctrl_t ctrl, int filefd, const char *filename,
       char xname[64];
 
       rc = gpg_error_from_syserror ();
-      if (filefd != -1)
-        snprintf (xname, sizeof xname, "[fd %d]", filefd);
+      if (filefd != GNUPG_INVALID_FD)
+        snprintf (xname, sizeof xname, "[fd %d]", (int)(intptr_t)filefd);
       else if (!filename)
         strcpy (xname, "[stdin]");
       else
@@ -903,11 +904,10 @@ encrypt_crypt (ctrl_t ctrl, int filefd, const char *filename,
   if (filename && *filename
       && !iobuf_is_pipe_filename (filename) && !opt.textmode )
     {
-      off_t tmpsize;
-      int overflow;
+      uint64_t tmpsize;
 
-      if ( !(tmpsize = iobuf_get_filelength(inp, &overflow))
-           && !overflow && opt.verbose)
+      tmpsize = iobuf_get_filelength (inp);
+      if (!tmpsize && opt.verbose)
         log_info(_("WARNING: '%s' is an empty file\n"), filename );
       /* We can't encode the length of very large files because
          OpenPGP uses only 32 bit for file sizes.  So if the size
@@ -1225,7 +1225,8 @@ encrypt_crypt_files (ctrl_t ctrl, int nfiles, char **files, strlist_t remusr)
             }
           line[strlen(line)-1] = '\0';
           print_file_status(STATUS_FILE_START, line, 2);
-          rc = encrypt_crypt (ctrl, -1, line, remusr, 0, NULL, -1);
+          rc = encrypt_crypt (ctrl, GNUPG_INVALID_FD, line, remusr,
+                              0, NULL, GNUPG_INVALID_FD);
           if (rc)
             log_error ("encryption of '%s' failed: %s\n",
                        print_fname_stdin(line), gpg_strerror (rc) );
@@ -1237,7 +1238,8 @@ encrypt_crypt_files (ctrl_t ctrl, int nfiles, char **files, strlist_t remusr)
       while (nfiles--)
         {
           print_file_status(STATUS_FILE_START, *files, 2);
-          if ( (rc = encrypt_crypt (ctrl, -1, *files, remusr, 0, NULL, -1)) )
+          if ((rc = encrypt_crypt (ctrl, GNUPG_INVALID_FD, *files, remusr,
+                                   0, NULL, GNUPG_INVALID_FD)))
             log_error("encryption of '%s' failed: %s\n",
                       print_fname_stdin(*files), gpg_strerror (rc) );
           write_status( STATUS_FILE_DONE );

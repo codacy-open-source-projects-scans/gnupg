@@ -823,11 +823,10 @@ write_plaintext_packet (iobuf_t out, iobuf_t inp,
   /* Try to calculate the length of the data. */
   if ( !iobuf_is_pipe_filename (fname) && *fname)
     {
-      off_t tmpsize;
-      int overflow;
+      uint64_t tmpsize;
 
-      if (!(tmpsize = iobuf_get_filelength (inp, &overflow))
-          && !overflow && opt.verbose)
+      tmpsize = iobuf_get_filelength (inp);
+      if (!tmpsize && opt.verbose)
         log_info (_("WARNING: '%s' is an empty file\n"), fname);
 
       /* We can't encode the length of very large files because
@@ -1114,7 +1113,7 @@ sign_file (ctrl_t ctrl, strlist_t filenames, int detached, strlist_t locusr,
       else if (opt.verbose)
         log_info (_("writing to '%s'\n"), outfile);
     }
-  else if ((rc = open_outfile (-1, fname,
+  else if ((rc = open_outfile (GNUPG_INVALID_FD, fname,
                                opt.armor? 1 : detached? 2 : 0, 0, &out)))
     {
       goto leave;
@@ -1460,7 +1459,7 @@ clearsign_file (ctrl_t ctrl,
         log_info (_("writing to '%s'\n"), outfile);
 
     }
-  else if ((rc = open_outfile (-1, fname, 1, 0, &out)))
+  else if ((rc = open_outfile (GNUPG_INVALID_FD, fname, 1, 0, &out)))
     {
       goto leave;
     }
@@ -1638,7 +1637,7 @@ sign_symencrypt_file (ctrl_t ctrl, const char *fname, strlist_t locusr)
               /**/             : "CFB");
 
   /* Now create the outfile.  */
-  rc = open_outfile (-1, fname, opt.armor? 1:0, 0, &out);
+  rc = open_outfile (GNUPG_INVALID_FD, fname, opt.armor? 1:0, 0, &out);
   if (rc)
     goto leave;
 
