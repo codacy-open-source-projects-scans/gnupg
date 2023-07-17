@@ -76,6 +76,7 @@ int translate_sys2libc_fd (gnupg_fd_t fd, int for_write);
 int translate_sys2libc_fd_int (int fd, int for_write);
 gpg_error_t gnupg_parse_fdstr (const char *fdstr, es_syshd_t *r_syshd);
 int check_special_filename (const char *fname, int for_write, int notranslate);
+gnupg_fd_t gnupg_check_special_filename (const char *fname);
 FILE *gnupg_tmpfile (void);
 void gnupg_reopen_std (const char *pgmname);
 void gnupg_inhibit_set_foregound_window (int yes);
@@ -109,6 +110,7 @@ gpg_error_t gnupg_inotify_watch_delete_self (int *r_fd, const char *fname);
 gpg_error_t gnupg_inotify_watch_socket (int *r_fd, const char *socket_name);
 int gnupg_inotify_has_name (int fd, const char *name);
 
+estream_t open_stream_nc (gnupg_fd_t fd, const char *mode);
 
 #ifdef HAVE_W32_SYSTEM
 int gnupg_w32_set_errno (int ec);

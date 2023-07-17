@@ -337,6 +337,7 @@ gnupg_w32_set_errno (int ec)
   if (ec == -1)
     ec = GetLastError ();
   _set_errno (map_w32_to_errno (ec));
+  return ec;
 }
 #endif /*HAVE_W32_SYSTEM*/
 
@@ -680,6 +681,48 @@ check_special_filename (const char *fname, int for_write, int notranslate)
   return -1;
 }
 
+
+/* Check whether FNAME has the form "-&nnnn", where N is a number
+ * representing a file.  Returns GNUPG_INVALID_FD if it is not the
+ * case.  Returns a file descriptor on POSIX, a system handle on
+ * Windows.  */
+gnupg_fd_t
+gnupg_check_special_filename (const char *fname)
+{
+  if (allow_special_filenames
+      && fname && *fname == '-' && fname[1] == '&')
+    {
+      int i;
+
+      fname += 2;
+      for (i=0; digitp (fname+i); i++ )
+        ;
+      if (!fname[i])
+        {
+          es_syshd_t syshd;
+
+          if (gnupg_parse_fdstr (fname,  &syshd))
+            return GNUPG_INVALID_FD;
+
+#ifdef HAVE_W32_SYSTEM
+          if (syshd.type == ES_SYSHD_FD)
+            {
+              if (syshd.u.fd == 0)
+                return GetStdHandle (STD_INPUT_HANDLE);
+              else if (syshd.u.fd == 1)
+                return GetStdHandle (STD_OUTPUT_HANDLE);
+              else if (syshd.u.fd == 2)
+                return GetStdHandle (STD_ERROR_HANDLE);
+            }
+          else
+            return syshd.u.handle;
+#else
+          return syshd.u.fd;
+#endif
+        }
+    }
+  return GNUPG_INVALID_FD;
+}
 
 /* Replacement for tmpfile().  This is required because the tmpfile
    function of Windows' runtime library is broken, insecure, ignores
@@ -1929,4 +1972,23 @@ gnupg_fd_valid (int fd)
     return 0;
   close (d);
   return 1;
+}
+
+
+/* Open a stream from FD (a file descriptor on POSIX, a system
+   handle on Windows), non-closed.  */
+estream_t
+open_stream_nc (gnupg_fd_t fd, const char *mode)
+{
+  es_syshd_t syshd;
+
+#ifdef HAVE_W32_SYSTEM
+  syshd.type = ES_SYSHD_HANDLE;
+  syshd.u.handle = fd;
+#else
+  syshd.type = ES_SYSHD_FD;
+  syshd.u.fd = fd;
+#endif
+
+  return es_sysopen_nc (&syshd, mode);
 }
