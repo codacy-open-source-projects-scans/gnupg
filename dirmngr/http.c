@@ -397,7 +397,7 @@ _my_socket_new (int lnr, assuan_fd_t fd)
   so->refcount = 1;
   if (opt_debug)
     log_debug ("http.c:%d:socket_new: object %p for fd %d created\n",
-               lnr, so, (int)so->fd);
+               lnr, so, FD_DBG (so->fd));
   return so;
 }
 #define my_socket_new(a) _my_socket_new (__LINE__, (a))
@@ -409,7 +409,7 @@ _my_socket_ref (int lnr, my_socket_t so)
   so->refcount++;
   if (opt_debug > 1)
     log_debug ("http.c:%d:socket_ref: object %p for fd %d refcount now %d\n",
-               lnr, so, (int)so->fd, so->refcount);
+               lnr, so, FD_DBG (so->fd), so->refcount);
   return so;
 }
 #define my_socket_ref(a) _my_socket_ref (__LINE__,(a))
@@ -427,7 +427,7 @@ _my_socket_unref (int lnr, my_socket_t so,
       so->refcount--;
       if (opt_debug > 1)
         log_debug ("http.c:%d:socket_unref: object %p for fd %d ref now %d\n",
-                   lnr, so, (int)so->fd, so->refcount);
+                   lnr, so, FD_DBG (so->fd), so->refcount);
 
       if (!so->refcount)
         {
@@ -2052,7 +2052,7 @@ send_request (ctrl_t ctrl, http_t hd, const char *httphost, const char *auth,
       /* Until we support send/recv in estream under Windows we need
        * to use es_fopencookie.  */
 # ifdef HAVE_W32_SYSTEM
-      in = es_fopencookie ((void*)(unsigned int)hd->sock->fd, "rb",
+      in = es_fopencookie (hd->sock->fd, "rb",
                            simple_cookie_functions);
 # else
       in = es_fdopen_nc (hd->sock->fd, "rb");
@@ -2065,7 +2065,7 @@ send_request (ctrl_t ctrl, http_t hd, const char *httphost, const char *auth,
         }
 
 # ifdef HAVE_W32_SYSTEM
-      out = es_fopencookie ((void*)(unsigned int)hd->sock->fd, "wb",
+      out = es_fopencookie (hd->sock->fd, "wb",
                             simple_cookie_functions);
 # else
       out = es_fdopen_nc (hd->sock->fd, "wb");
@@ -2906,7 +2906,7 @@ connect_with_timeout (assuan_fd_t sock,
   tval.tv_sec = timeout / 1000;
   tval.tv_usec = (timeout % 1000) * 1000;
 
-  n = my_select (FD2INT(sock)+1, &rset, &wset, NULL, &tval);
+  n = my_select (FD2NUM(sock)+1, &rset, &wset, NULL, &tval);
   if (n < 0)
     {
       err = gpg_err_make (default_errsource, gpg_err_code_from_syserror ());

@@ -221,7 +221,7 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_s_i (oListenBacklog, "listen-backlog", "@"),
   ARGPARSE_s_i (oMaxReplies, "max-replies",
                 N_("|N|do not return more than N items in one query")),
-  ARGPARSE_s_u (oFakedSystemTime, "faked-system-time", "@"), /*(epoch time)*/
+  ARGPARSE_s_s (oFakedSystemTime, "faked-system-time", "@"),
   ARGPARSE_s_n (oDisableCheckOwnSocket, "disable-check-own-socket", "@"),
   ARGPARSE_s_s (oIgnoreCert,"ignore-cert", "@"),
   ARGPARSE_s_s (oIgnoreCertExtension,"ignore-cert-extension", "@"),
@@ -1179,7 +1179,12 @@ main (int argc, char **argv)
 	case oLDAPAddServers: opt.add_new_ldapservers = 1; break;
 
         case oFakedSystemTime:
-          gnupg_set_time ((time_t)pargs.r.ret_ulong, 0);
+          {
+            time_t faked_time = isotime2epoch (pargs.r.ret_str);
+            if (faked_time == (time_t)(-1))
+              faked_time = (time_t)strtoul (pargs.r.ret_str, NULL, 10);
+            gnupg_set_time (faked_time, 0);
+          }
           break;
 
         case oForce: opt.force = 1; break;
@@ -2232,7 +2237,7 @@ check_nonce (assuan_fd_t fd, assuan_sock_nonce_t *nonce)
   if (assuan_sock_check_nonce (fd, nonce))
     {
       log_info (_("error reading nonce on fd %d: %s\n"),
-                FD2INT (fd), strerror (errno));
+                FD_DBG (fd), strerror (errno));
       assuan_sock_close (fd);
       return -1;
     }
@@ -2266,7 +2271,7 @@ start_connection_thread (void *arg)
 
   active_connections++;
   if (opt.verbose)
-    log_info (_("handler for fd %d started\n"), FD2INT (fd));
+    log_info (_("handler for fd %d started\n"), FD_DBG (fd));
 
   session_id = ++last_session_id;
   if (!session_id)
@@ -2274,7 +2279,7 @@ start_connection_thread (void *arg)
   start_command_handler (fd, session_id);
 
   if (opt.verbose)
-    log_info (_("handler for fd %d terminated\n"), FD2INT (fd));
+    log_info (_("handler for fd %d terminated\n"), FD_DBG (fd));
   active_connections--;
 
   workqueue_run_post_session_tasks (session_id);
@@ -2377,7 +2382,7 @@ handle_connections (assuan_fd_t listen_fd)
      to full second.  */
   FD_ZERO (&fdset);
   FD_SET (FD2INT (listen_fd), &fdset);
-  nfd = FD2INT (listen_fd);
+  nfd = FD2NUM (listen_fd);
   if (my_inotify_fd != -1)
     {
       FD_SET (my_inotify_fd, &fdset);
@@ -2493,7 +2498,7 @@ handle_connections (assuan_fd_t listen_fd)
               memset (&argval, 0, sizeof argval);
               argval.afd = fd;
               snprintf (threadname, sizeof threadname,
-                        "conn fd=%d", FD2INT(fd));
+                        "conn fd=%d", FD_DBG (fd));
 
               ret = npth_create (&thread, &tattr,
                                  start_connection_thread, argval.aptr);

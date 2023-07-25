@@ -2569,7 +2569,7 @@ check_nonce (ctrl_t ctrl, assuan_sock_nonce_t *nonce)
   if (assuan_sock_check_nonce (ctrl->thread_startup.fd, nonce))
     {
       log_info (_("error reading nonce on fd %d: %s\n"),
-                FD2INT(ctrl->thread_startup.fd), strerror (errno));
+                FD_DBG (ctrl->thread_startup.fd), strerror (errno));
       assuan_sock_close (ctrl->thread_startup.fd);
       xfree (ctrl);
       return -1;
@@ -2869,12 +2869,12 @@ do_start_connection_thread (ctrl_t ctrl)
   agent_init_default_ctrl (ctrl);
   if (opt.verbose > 1 && !DBG_IPC)
     log_info (_("handler 0x%lx for fd %d started\n"),
-              (unsigned long) npth_self(), FD2INT(ctrl->thread_startup.fd));
+              (unsigned long) npth_self(), FD_DBG (ctrl->thread_startup.fd));
 
   start_command_handler (ctrl, GNUPG_INVALID_FD, ctrl->thread_startup.fd);
   if (opt.verbose > 1 && !DBG_IPC)
     log_info (_("handler 0x%lx for fd %d terminated\n"),
-              (unsigned long) npth_self(), FD2INT(ctrl->thread_startup.fd));
+              (unsigned long) npth_self(), FD_DBG (ctrl->thread_startup.fd));
 
   agent_deinit_default_ctrl (ctrl);
   xfree (ctrl);
@@ -2949,12 +2949,12 @@ start_connection_thread_ssh (void *arg)
   agent_init_default_ctrl (ctrl);
   if (opt.verbose)
     log_info (_("ssh handler 0x%lx for fd %d started\n"),
-              (unsigned long) npth_self(), FD2INT(ctrl->thread_startup.fd));
+              (unsigned long) npth_self(), FD_DBG (ctrl->thread_startup.fd));
 
   start_command_handler_ssh (ctrl, ctrl->thread_startup.fd);
   if (opt.verbose)
     log_info (_("ssh handler 0x%lx for fd %d terminated\n"),
-              (unsigned long) npth_self(), FD2INT(ctrl->thread_startup.fd));
+              (unsigned long) npth_self(), FD_DBG (ctrl->thread_startup.fd));
 
   agent_deinit_default_ctrl (ctrl);
   xfree (ctrl);
@@ -3070,24 +3070,24 @@ handle_connections (gnupg_fd_t listen_fd,
 
   FD_ZERO (&fdset);
   FD_SET (FD2INT (listen_fd), &fdset);
-  nfd = FD2INT (listen_fd);
+  nfd = FD2NUM (listen_fd);
   if (listen_fd_extra != GNUPG_INVALID_FD)
     {
       FD_SET ( FD2INT(listen_fd_extra), &fdset);
       if (FD2INT (listen_fd_extra) > nfd)
-        nfd = FD2INT (listen_fd_extra);
+        nfd = FD2NUM (listen_fd_extra);
     }
   if (listen_fd_browser != GNUPG_INVALID_FD)
     {
       FD_SET ( FD2INT(listen_fd_browser), &fdset);
       if (FD2INT (listen_fd_browser) > nfd)
-        nfd = FD2INT (listen_fd_browser);
+        nfd = FD2NUM (listen_fd_browser);
     }
   if (listen_fd_ssh != GNUPG_INVALID_FD)
     {
       FD_SET ( FD2INT(listen_fd_ssh), &fdset);
       if (FD2INT (listen_fd_ssh) > nfd)
-        nfd = FD2INT (listen_fd_ssh);
+        nfd = FD2NUM (listen_fd_ssh);
     }
   if (sock_inotify_fd != -1)
     {
