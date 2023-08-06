@@ -453,9 +453,6 @@ static void handle_connections (assuan_fd_t listen_fd);
 static void gpgconf_versions (void);
 
 
-/* NPth wrapper function definitions. */
-ASSUAN_SYSTEM_NPTH_IMPL;
-
 static const char *
 my_strusage( int level )
 {
@@ -983,7 +980,6 @@ static void
 thread_init (void)
 {
   npth_init ();
-  assuan_set_system_hooks (ASSUAN_SYSTEM_NPTH);
   gpgrt_set_syscall_clamp (npth_unprotect, npth_protect);
 
   /* Now with NPth running we can set the logging callback.  Our
@@ -2483,8 +2479,8 @@ handle_connections (assuan_fd_t listen_fd)
           gnupg_fd_t fd;
 
           plen = sizeof paddr;
-	  fd = INT2FD (npth_accept (FD2INT(listen_fd),
-				    (struct sockaddr *)&paddr, &plen));
+	  fd = assuan_sock_accept (listen_fd,
+                                   (struct sockaddr *)&paddr, &plen);
 	  if (fd == GNUPG_INVALID_FD)
 	    {
 	      log_error ("accept failed: %s\n", strerror (errno));

@@ -272,9 +272,6 @@ static gnupg_fd_t create_server_socket (const char *name,
 static void *start_connection_thread (void *arg);
 static void handle_connections (gnupg_fd_t listen_fd);
 
-/* Pth wrapper function definitions. */
-ASSUAN_SYSTEM_NPTH_IMPL;
-
 static int active_connections;
 
 
@@ -480,7 +477,6 @@ main (int argc, char **argv )
   malloc_hooks.free = gcry_free;
   assuan_set_malloc_hooks (&malloc_hooks);
   assuan_set_gpg_err_source (GPG_ERR_SOURCE_DEFAULT);
-  assuan_set_system_hooks (ASSUAN_SYSTEM_NPTH);
   assuan_sock_init ();
   setup_libassuan_logging (&opt.debug, NULL);
 
@@ -758,6 +754,7 @@ main (int argc, char **argv )
       npth_init ();
       setup_signal_mask ();
       gpgrt_set_syscall_clamp (npth_unprotect, npth_protect);
+      assuan_control (ASSUAN_CONTROL_REINIT_SYSCALL_CLAMP, NULL);
 
       /* If --debug-allow-core-dump has been given we also need to
          switch the working directory to a place where we can actually
@@ -899,6 +896,7 @@ main (int argc, char **argv )
       npth_init ();
       setup_signal_mask ();
       gpgrt_set_syscall_clamp (npth_unprotect, npth_protect);
+      assuan_control (ASSUAN_CONTROL_REINIT_SYSCALL_CLAMP, NULL);
 
       /* Detach from tty and put process into a new session. */
       if (!nodetach )
@@ -1399,8 +1397,8 @@ handle_connections (gnupg_fd_t listen_fd)
           gnupg_fd_t fd;
 
           plen = sizeof paddr;
-          fd = INT2FD (npth_accept (FD2INT (listen_fd),
-                                    (struct sockaddr *)&paddr, &plen));
+          fd = assuan_sock_accept (listen_fd,
+                                   (struct sockaddr *)&paddr, &plen);
           if (fd == GNUPG_INVALID_FD)
             {
               log_error ("accept failed: %s\n", strerror (errno));

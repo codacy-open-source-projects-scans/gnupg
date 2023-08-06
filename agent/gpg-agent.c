@@ -520,9 +520,6 @@ static void handle_connections (gnupg_fd_t listen_fd,
 static void check_own_socket (void);
 static int check_for_running_agent (int silent);
 
-/* Pth wrapper function definitions. */
-ASSUAN_SYSTEM_NPTH_IMPL;
-
 
 /*
    Functions.
@@ -1046,6 +1043,7 @@ thread_init_once (void)
    * initialized and thus Libgcrypt could not set its system call
    * clamp.  */
   gcry_control (GCRYCTL_REINIT_SYSCALL_CLAMP, 0, 0);
+  assuan_control (ASSUAN_CONTROL_REINIT_SYSCALL_CLAMP, NULL);
 }
 
 
@@ -1053,7 +1051,6 @@ static void
 initialize_modules (void)
 {
   thread_init_once ();
-  assuan_set_system_hooks (ASSUAN_SYSTEM_NPTH);
   initialize_module_cache ();
   initialize_module_call_pinentry ();
   initialize_module_daemon ();
@@ -1113,7 +1110,6 @@ main (int argc, char **argv)
   assuan_set_malloc_hooks (&malloc_hooks);
   assuan_set_gpg_err_source (GPG_ERR_SOURCE_DEFAULT);
   assuan_sock_init ();
-  assuan_sock_set_system_hooks (ASSUAN_SYSTEM_NPTH);
   setup_libassuan_logging (&opt.debug, NULL);
 
   setup_libgcrypt_logging ();
@@ -3222,8 +3218,8 @@ handle_connections (gnupg_fd_t listen_fd,
                 continue;
 
               plen = sizeof paddr;
-              fd = INT2FD (npth_accept (FD2INT(listentbl[idx].l_fd),
-                                        (struct sockaddr *)&paddr, &plen));
+              fd = assuan_sock_accept (listentbl[idx].l_fd,
+                                       (struct sockaddr *)&paddr, &plen);
               if (fd == GNUPG_INVALID_FD)
                 {
                   log_error ("accept failed for %s: %s\n",

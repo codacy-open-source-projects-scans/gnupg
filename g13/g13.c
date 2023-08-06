@@ -227,10 +227,6 @@ static void start_idle_task (void);
 static void join_idle_task (void);
 
 
-/* Begin NPth wrapper functions. */
-ASSUAN_SYSTEM_NPTH_IMPL;
-
-
 static const char *
 my_strusage( int level )
 {
@@ -377,6 +373,7 @@ main (int argc, char **argv)
   init_common_subsystems (&argc, &argv);
 
   npth_init ();
+  gpgrt_set_syscall_clamp (npth_unprotect, npth_protect);
 
   /* Take extra care of the random pool.  */
   gcry_control (GCRYCTL_USE_SECURE_RNDPOOL);
@@ -435,8 +432,8 @@ main (int argc, char **argv)
 
   /* Prepare libassuan.  */
   assuan_set_gpg_err_source (GPG_ERR_SOURCE_DEFAULT);
-  assuan_set_system_hooks (ASSUAN_SYSTEM_NPTH);
   setup_libassuan_logging (&opt.debug, NULL);
+  assuan_control (ASSUAN_REINIT_SYSCALL_CLAMP, NULL);
 
   /* Setup a default control structure for command line mode.  */
   memset (&ctrl, 0, sizeof ctrl);
