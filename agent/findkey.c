@@ -118,7 +118,7 @@ agent_write_private_key (const unsigned char *grip,
   gpg_error_t err;
   char *fname = NULL;
   char *tmpfname = NULL;
-  estream_t fp;
+  estream_t fp = NULL;
   int newkey;
   nvc_t pk = NULL;
   gcry_sexp_t key = NULL;
@@ -333,7 +333,7 @@ agent_update_private_key (const unsigned char *grip, nvc_t pk)
   int blocksigs = 0;
 
   fname0 = fname_from_keygrip (grip, 0);
-  if (!fname)
+  if (!fname0)
     {
       err = gpg_error_from_syserror ();
       goto leave;
