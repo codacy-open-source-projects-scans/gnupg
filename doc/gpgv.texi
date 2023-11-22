@@ -180,10 +180,18 @@ If set directory used instead of "~/.gnupg".
 @mansect files
 @subsection FILES
 
-@table @asis
+Default keyring file is expected in the GnuPG home directory
+(@pxref{option --homedir}, @code{GNUPGHOME}).
+
+@table @file
+@item ~/.gnupg/trustedkeys.kbx
+@efindex trustedkeys.kbx
+The default keyring with the allowed keys, using the new keybox format.
 
 @item ~/.gnupg/trustedkeys.gpg
-The default keyring with the allowed keys.
+@efindex trustedkeys.gpg
+When @file{trustedkeys.kbx} is not available, the default keyring with
+the allowed keys, using a legacy format.
 
 @end table
 
