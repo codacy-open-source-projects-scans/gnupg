@@ -204,11 +204,6 @@ static char *current_logfile;
  * alternative but portable stat based check.  */
 static int have_homedir_inotify;
 
-/* Depending on how keyboxd was started, the homedir inotify watch may
- * not be reliable.  This flag is set if we assume that inotify works
- * reliable.  */
-static int reliable_homedir_inotify;
-
 /* Number of active connections.  */
 static int active_connections;
 
@@ -804,11 +799,6 @@ main (int argc, char **argv )
           log_get_prefix (&oldflags);
           log_set_prefix (NULL, oldflags | GPGRT_LOG_RUN_DETACHED);
           opt.running_detached = 1;
-
-          /* Because we don't support running a program on the command
-           * line we can assume that the inotify things works and thus
-           * we can avoid the regular stat calls.  */
-          reliable_homedir_inotify = 1;
         }
 
       {
@@ -1300,7 +1290,7 @@ handle_tick (void)
 
   /* Check whether the homedir is still available.  */
   if (!shutdown_pending
-      && (!have_homedir_inotify || !reliable_homedir_inotify)
+      && !have_homedir_inotify
       && gnupg_stat (gnupg_homedir (), &statbuf) && errno == ENOENT)
     {
       shutdown_pending = 1;
@@ -1503,10 +1493,8 @@ handle_connections (gnupg_fd_t listen_fd)
                   gpg_strerror (err));
     }
 
-  if (disable_check_own_socket)
-    home_inotify_fd = -1;
-  else if ((err = gnupg_inotify_watch_delete_self (&home_inotify_fd,
-                                                   gnupg_homedir ())))
+  if ((err = gnupg_inotify_watch_delete_self (&home_inotify_fd,
+                                              gnupg_homedir ())))
     {
       if (gpg_err_code (err) != GPG_ERR_NOT_SUPPORTED)
         log_info ("error enabling daemon termination by homedir removal: %s\n",
