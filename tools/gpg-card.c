@@ -220,9 +220,15 @@ parse_arguments (gpgrt_argparse_t *pargs, gpgrt_opt_t *popts)
             }
           break;
 
-        case oGpgProgram:   opt.gpg_program = pargs->r.ret_str; break;
-        case oGpgsmProgram: opt.gpgsm_program = pargs->r.ret_str; break;
-        case oAgentProgram: opt.agent_program = pargs->r.ret_str; break;
+        case oGpgProgram:
+          opt.gpg_program = make_filename (pargs->r.ret_str, NULL);
+          break;
+        case oGpgsmProgram:
+          opt.gpgsm_program = make_filename (pargs->r.ret_str, NULL);
+          break;
+        case oAgentProgram:
+          opt.agent_program = make_filename (pargs->r.ret_str, NULL);
+          break;
 
         case oStatusFD:
           gnupg_set_status_fd (translate_sys2libc_fd_int (pargs->r.ret_int, 1));
@@ -309,9 +315,9 @@ main (int argc, char **argv)
 
   /* Set defaults for non given options.  */
   if (!opt.gpg_program)
-    opt.gpg_program = gnupg_module_name (GNUPG_MODULE_NAME_GPG);
+    opt.gpg_program = xstrdup (gnupg_module_name (GNUPG_MODULE_NAME_GPG));
   if (!opt.gpgsm_program)
-    opt.gpgsm_program = gnupg_module_name (GNUPG_MODULE_NAME_GPGSM);
+    opt.gpgsm_program = xstrdup (gnupg_module_name (GNUPG_MODULE_NAME_GPGSM));
 
   /* Now build the list of commands.  We guess the size of the array
    * by assuming each item is a complete command.  Obviously this will
@@ -402,7 +408,7 @@ nullnone (const char *s)
  * success returns 0 and stores the number of bytes read at R_BUFLEN
  * and the address of a newly allocated buffer at R_BUFFER.  A
  * complementary nul byte is always appended to the data but not
- * counted; this allows to pass NULL for R-BUFFER and consider the
+ * counted; this allows one to pass NULL for R-BUFFER and consider the
  * returned data as a string. */
 static gpg_error_t
 get_data_from_file (const char *fname, char **r_buffer, size_t *r_buflen)

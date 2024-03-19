@@ -781,9 +781,13 @@ proc_encrypted (CTX c, PACKET *pkt)
         compliance_de_vs |= 2;
     }
 
-  /* Trigger the deferred error.  */
+  /* Trigger the deferred error.  The second condition makes sure that a
+   * log_error printed in the cry_cipher_checktag never gets ignored.  */
   if (!result && early_plaintext)
     result = gpg_error (GPG_ERR_BAD_DATA);
+  else if (!result && pkt->pkt.encrypted->aead_algo
+           && log_get_errorcount (0))
+    result = gpg_error (GPG_ERR_BAD_SIGNATURE);
 
   if (result == -1)
     ;
@@ -898,7 +902,7 @@ proc_encrypted (CTX c, PACKET *pkt)
    * encrypted packet.  */
   literals_seen++;
 
-  /* The --require-compliance option allows to simplify decryption in
+  /* The --require-compliance option allows one to simplify decryption in
    * de-vs compliance mode by just looking at the exit status.  */
   if (opt.flags.require_compliance
       && opt.compliance == CO_DE_VS
@@ -1876,6 +1880,8 @@ check_sig_and_print (CTX c, kbnode_t node)
   const void *extrahash = NULL;
   size_t extrahashlen = 0;
   kbnode_t included_keyblock = NULL;
+  char pkstrbuf[PUBKEY_STRING_SIZE] = { 0 };
+
 
   if (opt.skip_verify)
     {
@@ -2409,8 +2415,14 @@ check_sig_and_print (CTX c, kbnode_t node)
             show_notation (sig, 0, 2, 0);
         }
 
+      /* Fill PKSTRBUF with the algostring in case we later need it.  */
+      if (pk)
+        pubkey_string (pk, pkstrbuf, sizeof pkstrbuf);
+
       /* For good signatures print the VALIDSIG status line.  */
-      if (!rc && (is_status_enabled () || opt.assert_signer_list) && pk)
+      if (!rc && (is_status_enabled ()
+                  || opt.assert_signer_list
+                  || opt.assert_pubkey_algos) && pk)
         {
           char pkhex[MAX_FINGERPRINT_LEN*2+1];
           char mainpkhex[MAX_FINGERPRINT_LEN*2+1];
@@ -2432,6 +2444,8 @@ check_sig_and_print (CTX c, kbnode_t node)
                                mainpkhex);
           /* Handle the --assert-signer option.  */
           check_assert_signer_list (mainpkhex, pkhex);
+          /* Handle the --assert-pubkey-algo option.  */
+          check_assert_pubkey_algo (pkstrbuf, pkhex);
 	}
 
       /* Print compliance warning for Good signatures.  */
@@ -2464,13 +2478,6 @@ check_sig_and_print (CTX c, kbnode_t node)
 
       if (opt.verbose)
         {
-          char pkstrbuf[PUBKEY_STRING_SIZE];
-
-          if (pk)
-            pubkey_string (pk, pkstrbuf, sizeof pkstrbuf);
-          else
-            *pkstrbuf = 0;
-
           log_info (_("%s signature, digest algorithm %s%s%s\n"),
                     sig->sig_class==0x00?_("binary"):
                     sig->sig_class==0x01?_("textmode"):_("unknown"),
