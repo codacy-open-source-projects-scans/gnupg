@@ -119,8 +119,8 @@ static struct {
   { 0x00D6, 0, 0x6E, 1, 0, 0, 0, 0, "UIF for Signature"},
   { 0x00D7, 0, 0x6E, 1, 0, 0, 0, 0, "UIF for Decryption"},
   { 0x00D8, 0, 0x6E, 1, 0, 0, 0, 0, "UIF for Authentication"},
-  { 0x00F9, 0,    0, 1, 0, 0, 0, 0, "KDF data object"},
-  { 0x00FA, 0,    0, 1, 0, 0, 0, 2, "Algorithm Information"},
+  { 0x00F9, 1,    0, 1, 0, 0, 0, 0, "KDF data object"},
+  { 0x00FA, 1,    0, 1, 0, 0, 0, 2, "Algorithm Information"},
   { 0 }
 };
 
@@ -310,6 +310,7 @@ get_manufacturer (unsigned int no)
     case 0x000D: return "Dangerous Things";
     case 0x000E: return "Excelsecu";
     case 0x000F: return "Nitrokey";
+    case 0x0010: return "NeoPGP";
 
     case 0x002A: return "Magrathea";
     case 0x0042: return "GnuPG e.V.";
