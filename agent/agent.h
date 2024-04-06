@@ -288,8 +288,11 @@ struct server_control_s
     unsigned int raw_value: 1;
     unsigned int is_pss: 1;    /* DATA holds PSS formated data.  */
   } digest;
+  unsigned int have_keygrip:  1;
+  unsigned int have_keygrip1: 1;
   unsigned char keygrip[20];
-  int have_keygrip;
+  unsigned char keygrip1[20]; /* Another keygrip for hybrid crypto.  */
+
 
   /* A flag to enable a hack to send the PKAUTH command instead of the
      PKSIGN command to the scdaemon.  */
@@ -556,6 +559,18 @@ gpg_error_t agent_pksign (ctrl_t ctrl, const char *cache_nonce,
 gpg_error_t agent_pkdecrypt (ctrl_t ctrl, const char *desc_text,
                              const unsigned char *ciphertext, size_t ciphertextlen,
                              membuf_t *outbuf, int *r_padding);
+
+enum kemids
+  {
+    KEM_PQC_PGP,
+    KEM_PGP,
+    KEM_CMS
+  };
+
+gpg_error_t agent_kem_decrypt (ctrl_t ctrl, const char *desc_text, int kemid,
+                               const unsigned char *ct, size_t ctlen,
+                               const unsigned char *option, size_t optionlen,
+                               membuf_t *outbuf);
 
 /*-- genkey.c --*/
 #define CHECK_CONSTRAINTS_NOT_EMPTY  1

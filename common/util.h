@@ -229,7 +229,7 @@ int openpgp_oid_is_cv448 (gcry_mpi_t a);
 int openpgp_oid_is_ed448 (gcry_mpi_t a);
 const char *openpgp_curve_to_oid (const char *name,
                                   unsigned int *r_nbits, int *r_algo);
-const char *openpgp_oid_to_curve (const char *oid, int canon);
+const char *openpgp_oid_to_curve (const char *oid, int mode);
 const char *openpgp_oid_or_name_to_curve (const char *oidname, int canon);
 const char *openpgp_enum_curves (int *idxp);
 const char *openpgp_is_curve_supported (const char *name,
@@ -298,6 +298,12 @@ char *gnupg_get_help_string (const char *key, int only_current_locale);
 
 /*-- localename.c --*/
 const char *gnupg_messages_locale_name (void);
+
+/*-- kmac.c --*/
+gpg_error_t compute_kmac256 (void *digest, size_t digestlen,
+                             const void *key, size_t keylen,
+                             const void *custom, size_t customlen,
+                             gcry_buffer_t *data_iov, int data_iovlen);
 
 /*-- miscellaneous.c --*/
 

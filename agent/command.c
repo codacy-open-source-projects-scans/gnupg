@@ -241,7 +241,7 @@ reset_notify (assuan_context_t ctx, char *line)
   (void) line;
 
   memset (ctrl->keygrip, 0, 20);
-  ctrl->have_keygrip = 0;
+  ctrl->have_keygrip = ctrl->have_keygrip1 = 0;
   ctrl->digest.valuelen = 0;
   xfree (ctrl->digest.data);
   ctrl->digest.data = NULL;
@@ -796,8 +796,8 @@ cmd_havekey (assuan_context_t ctx, char *line)
 
 
 static const char hlp_sigkey[] =
-  "SIGKEY <hexstring_with_keygrip>\n"
-  "SETKEY <hexstring_with_keygrip>\n"
+  "SIGKEY [--another] <hexstring_with_keygrip>\n"
+  "SETKEY [--another] <hexstring_with_keygrip>\n"
   "\n"
   "Set the  key used for a sign or decrypt operation.";
 static gpg_error_t
@@ -805,11 +805,17 @@ cmd_sigkey (assuan_context_t ctx, char *line)
 {
   int rc;
   ctrl_t ctrl = assuan_get_pointer (ctx);
+  int opt_another;
 
-  rc = parse_keygrip (ctx, line, ctrl->keygrip);
+  opt_another = has_option (line, "--another");
+  line = skip_options (line);
+  rc = parse_keygrip (ctx, line, opt_another? ctrl->keygrip1 : ctrl->keygrip);
   if (rc)
     return rc;
-  ctrl->have_keygrip = 1;
+  if (opt_another)
+    ctrl->have_keygrip1 = 1;
+  else
+    ctrl->have_keygrip = 1;
   return 0;
 }
 
@@ -1043,10 +1049,14 @@ cmd_pksign (assuan_context_t ctx, char *line)
 
 
 static const char hlp_pkdecrypt[] =
-  "PKDECRYPT [<options>]\n"
+  "PKDECRYPT [--kem[=<kemid>] [<options>]\n"
   "\n"
   "Perform the actual decrypt operation.  Input is not\n"
-  "sensitive to eavesdropping.";
+  "sensitive to eavesdropping.\n"
+  "If the --kem option is used, decryption is done with the KEM,\n"
+  "inquiring upper-layer option, when needed.  KEMID can be\n"
+  "specified with --kem option;  Valid value is: PQC-PGP, PGP, or CMS.\n"
+  "Default is PQC-PGP.";
 static gpg_error_t
 cmd_pkdecrypt (assuan_context_t ctx, char *line)
 {
@@ -1055,22 +1065,52 @@ cmd_pkdecrypt (assuan_context_t ctx, char *line)
   unsigned char *value;
   size_t valuelen;
   membuf_t outbuf;
-  int padding;
+  int padding = -1;
+  unsigned char *option = NULL;
+  size_t optionlen = 0;
+  const char *p;
+  int kemid = -1;
 
-  (void)line;
+  p = has_option_name (line, "--kem");
+  if (p)
+    {
+      kemid = KEM_PQC_PGP;
+      if (*p == '=')
+        {
+          p++;
+          if (!strcmp (p, "PQC-PGP"))
+            kemid = KEM_PQC_PGP;
+          else if (!strcmp (p, "PGP"))
+            kemid = KEM_PGP;
+          else if (!strcmp (p, "CMS"))
+            kemid = KEM_CMS;
+          else
+            return set_error (GPG_ERR_ASS_PARAMETER, "invalid KEM algorithm");
+        }
+    }
 
   /* First inquire the data to decrypt */
   rc = print_assuan_status (ctx, "INQUIRE_MAXLEN", "%u", MAXLEN_CIPHERTEXT);
   if (!rc)
     rc = assuan_inquire (ctx, "CIPHERTEXT",
 			&value, &valuelen, MAXLEN_CIPHERTEXT);
+  if (!rc && kemid > KEM_PQC_PGP)
+    rc = assuan_inquire (ctx, "OPTION",
+                         &option, &optionlen, MAXLEN_CIPHERTEXT);
   if (rc)
     return rc;
 
   init_membuf (&outbuf, 512);
 
-  rc = agent_pkdecrypt (ctrl, ctrl->server_local->keydesc,
-                        value, valuelen, &outbuf, &padding);
+  if (kemid < 0)
+    rc = agent_pkdecrypt (ctrl, ctrl->server_local->keydesc,
+                          value, valuelen, &outbuf, &padding);
+  else
+    {
+      rc = agent_kem_decrypt (ctrl, ctrl->server_local->keydesc, kemid,
+                              value, valuelen, option, optionlen, &outbuf);
+      xfree (option);
+    }
   xfree (value);
   if (rc)
     clear_outbuf (&outbuf);
@@ -1418,7 +1458,9 @@ cmd_readkey (assuan_context_t ctx, char *line)
         goto leave;
 
       rc = agent_public_key_from_file (ctrl, grip, &s_pkey);
-      if (!rc)
+      if (rc)
+        goto leave;
+      else
         {
           if (opt_format_ssh)
             {
