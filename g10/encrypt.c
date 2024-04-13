@@ -758,7 +758,7 @@ write_symkey_enc (STRING2KEY *symkey_s2k, aead_algo_t aead_algo,
  * Encrypt the file with the given userids (or ask if none is
  * supplied).  Either FILENAME or FILEFD must be given, but not both.
  * The caller may provide a checked list of public keys in
- * PROVIDED_PKS; if not the function builds a list of keys on its own.
+ * PROVIDED_KEYS; if not the function builds a list of keys on its own.
  *
  * Note that FILEFD is currently only used by cmd_encrypt in the
  * not yet finished server.c.
@@ -1122,6 +1122,7 @@ write_pubkey_enc (ctrl_t ctrl,
   enc->pubkey_algo = pk->pubkey_algo;
   keyid_from_pk( pk, enc->keyid );
   enc->throw_keyid = throw_keyid;
+  enc->seskey_algo = dek->algo;  /* (Used only by PUBKEY_ALGO_KYBER.) */
 
   /* Okay, what's going on: We have the session key somewhere in
    * the structure DEK and want to encode this session key in an
@@ -1137,7 +1138,7 @@ write_pubkey_enc (ctrl_t ctrl,
    * build_packet().  */
   frame = encode_session_key (pk->pubkey_algo, dek,
                               pubkey_nbits (pk->pubkey_algo, pk->pkey));
-  rc = pk_encrypt (pk->pubkey_algo, enc->data, frame, pk, pk->pkey);
+  rc = pk_encrypt (pk, frame, enc->data);
   gcry_mpi_release (frame);
   if (rc)
     log_error ("pubkey_encrypt failed: %s\n", gpg_strerror (rc) );
