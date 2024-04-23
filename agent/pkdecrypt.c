@@ -29,6 +29,75 @@
 #include "agent.h"
 #include "../common/openpgpdefs.h"
 
+
+/* Table with parameters for KEM decryption.  Use get_ecc_parms to
+ * find an entry.  */
+struct ecc_params
+{
+  const char *curve;            /* Canonical name of the curve.  */
+  size_t pubkey_len;            /* Pubkey in the SEXP representation.   */
+  size_t scalar_len;
+  size_t point_len;
+  size_t shared_len;
+  int hash_algo;
+  int algo;
+  int scalar_reverse;
+};
+
+static const struct ecc_params ecc_table[] =
+  {
+    {
+      "Curve25519",
+      33, 32, 32, 32,
+      GCRY_MD_SHA3_256, GCRY_KEM_RAW_X25519,
+      1
+    },
+    {
+      "X448",
+      56, 56, 56, 64,
+      GCRY_MD_SHA3_512, GCRY_KEM_RAW_X448,
+      0
+    },
+    {
+      "brainpoolP256r1",
+      65, 32, 65, 32,
+      GCRY_MD_SHA3_256, GCRY_KEM_RAW_BP256,
+      0
+    },
+    {
+      "brainpoolP384r1",
+      97, 48, 97, 64,
+      GCRY_MD_SHA3_512, GCRY_KEM_RAW_BP384,
+      0
+    },
+    { NULL, 0, 0, 0, 0, 0, 0, 0 }
+};
+
+
+/* Maximum buffer sizes required for ECC KEM.  Keep this aligned to
+ * the ecc_table above.  */
+#define ECC_SCALAR_LEN_MAX 64
+#define ECC_POINT_LEN_MAX (1+2*64)
+#define ECC_HASH_LEN_MAX 64
+
+
+
+/* Return the ECC parameters for CURVE.  CURVE is expected to be the
+ * canonical name.  */
+static const struct ecc_params *
+get_ecc_params (const char *curve)
+{
+  int i;
+
+  for (i = 0; ecc_table[i].curve; i++)
+    if (!strcmp (ecc_table[i].curve, curve))
+      return &ecc_table[i];
+
+  return NULL;
+}
+
+
+
 /* DECRYPT the stuff in ciphertext which is expected to be a S-Exp.
    Try to get the key from CTRL and write the decoded stuff back to
    OUTFP.   The padding information is stored at R_PADDING with -1
@@ -173,6 +242,7 @@ reverse_buffer (unsigned char *buffer, unsigned int length)
     }
 }
 
+
 /* For composite PGP KEM (ECC+ML-KEM), decrypt CIPHERTEXT using KEM API.
    First keygrip is for ECC, second keygrip is for PQC.  CIPHERTEXT
    should follow the format of:
@@ -190,11 +260,11 @@ static gpg_error_t
 composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
                            gcry_sexp_t s_cipher, membuf_t *outbuf)
 {
-#if GCRYPT_VERSION_NUMBER >= 0x010b00
   gcry_sexp_t s_skey0 = NULL;
   gcry_sexp_t s_skey1 = NULL;
   unsigned char *shadow_info = NULL;
   gpg_error_t err = 0;
+  const struct ecc_params *ecc;
 
   unsigned int nbits;
   const unsigned char *p;
@@ -206,20 +276,23 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
   size_t encrypted_sessionkey_len;
 
   gcry_mpi_t ecc_sk_mpi = NULL;
-  unsigned char ecc_sk[32];
+  unsigned char ecc_sk[ECC_SCALAR_LEN_MAX];
   gcry_mpi_t ecc_pk_mpi = NULL;
-  unsigned char ecc_pk[32];
+  unsigned char ecc_pk[ECC_POINT_LEN_MAX];
   gcry_mpi_t ecc_ct_mpi = NULL;
   const unsigned char *ecc_ct;
-  size_t ecc_ct_len;
-  unsigned char ecc_ecdh[32];
-  unsigned char ecc_ss[32];
+  unsigned char ecc_ecdh[ECC_POINT_LEN_MAX];
+  unsigned char ecc_ss[ECC_HASH_LEN_MAX];
 
+  enum gcry_kem_algos mlkem_kem_algo;
   gcry_mpi_t mlkem_sk_mpi = NULL;
   gcry_mpi_t mlkem_ct_mpi = NULL;
   const unsigned char *mlkem_sk;
+  size_t mlkem_sk_len;
   const unsigned char *mlkem_ct;
-  unsigned char mlkem_ss[GCRY_KEM_MLKEM768_SHARED_LEN];
+  size_t mlkem_ct_len;
+  unsigned char mlkem_ss[GCRY_KEM_MLKEM1024_SHARED_LEN];
+  size_t mlkem_ss_len;
 
   unsigned char kek[32];
   size_t kek_len = 32;        /* AES-256 is mandatory */
@@ -230,7 +303,7 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
   gcry_buffer_t fixed_info = { 0, 0, 0, NULL };
 
   gcry_sexp_t curve = NULL;
-  const char *curve_name;
+  char *curve_name = NULL;
 
   err = agent_key_from_file (ctrl, NULL, desc_text,
                              ctrl->keygrip, &shadow_info,
@@ -275,7 +348,7 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
       goto leave;
     }
 
-  /* Fistly, ECC part.  FIXME: For now, we assume X25519.  */
+  /* Firstly, ECC part.  */
   curve = gcry_sexp_find_token (s_skey0, "curve", 0);
   if (!curve)
     {
@@ -285,8 +358,9 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
       goto leave;
     }
 
-  curve_name = gcry_sexp_nth_data (curve, 1, &len);
-  if (len != 10 || memcmp (curve_name, "Curve25519", len))
+  curve_name = gcry_sexp_nth_string (curve, 1);
+  ecc = get_ecc_params (curve_name);
+  if (!ecc)
     {
       if (opt.verbose)
         log_info ("%s: curve '%s' not supported\n", __func__, curve_name);
@@ -305,45 +379,63 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
 
   p = gcry_mpi_get_opaque (ecc_pk_mpi, &nbits);
   len = (nbits+7)/8;
-  if (len != 33)
+  if (len != ecc->pubkey_len)
     {
       if (opt.verbose)
         log_info ("%s: ECC public key length invalid (%zu)\n", __func__, len);
       err = gpg_error (GPG_ERR_INV_DATA);
       goto leave;
     }
-  memcpy (ecc_pk, p+1, 32);     /* Remove the 0x40 prefix */
+  else if (len == ecc->point_len)
+    memcpy (ecc_pk, p, ecc->point_len);
+  else if (len == ecc->point_len + 1 && p[0] == 0x40)
+    /* Remove the 0x40 prefix (for Curve25519) */
+    memcpy (ecc_pk, p+1, ecc->point_len);
+  else
+    {
+      err = gpg_error (GPG_ERR_BAD_SECKEY);
+      goto leave;
+    }
+
   mpi_release (ecc_pk_mpi);
+  ecc_pk_mpi = NULL;
 
   p = gcry_mpi_get_opaque (ecc_sk_mpi, &nbits);
   len = (nbits+7)/8;
-  if (len > 32)
+  if (len > ecc->scalar_len)
     {
       if (opt.verbose)
         log_info ("%s: ECC secret key too long (%zu)\n", __func__, len);
       err = gpg_error (GPG_ERR_INV_DATA);
       goto leave;
     }
-  memset (ecc_sk, 0, 32);
-  memcpy (ecc_sk + 32 - len, p, len);
-  reverse_buffer (ecc_sk, 32);
+  memset (ecc_sk, 0, ecc->scalar_len - len);
+  memcpy (ecc_sk + ecc->scalar_len - len, p, len);
+  if (ecc->scalar_reverse)
+    reverse_buffer (ecc_sk, ecc->scalar_len);
   mpi_release (ecc_sk_mpi);
-  ecc_pk_mpi = NULL;
   ecc_sk_mpi = NULL;
 
   ecc_ct = gcry_mpi_get_opaque (ecc_ct_mpi, &nbits);
-  ecc_ct_len = (nbits+7)/8;
-  if (ecc_ct_len != 32)
+  if (ecc->point_len != (nbits+7)/8)
     {
       if (opt.verbose)
         log_info ("%s: ECC cipher text length invalid (%zu)\n",
-                   __func__, ecc_ct_len);
+                  __func__, ecc->point_len);
       err = gpg_error (GPG_ERR_INV_DATA);
       goto leave;
     }
 
-  err = gcry_kem_decap (GCRY_KEM_RAW_X25519, ecc_sk, 32, ecc_ct, ecc_ct_len,
-                        ecc_ecdh, 32, NULL, 0);
+  if (DBG_CRYPTO)
+    {
+      log_debug ("ECC    curve: %s\n", curve_name);
+      log_printhex (ecc_pk, ecc->pubkey_len, "ECC   pubkey:");
+      log_printhex (ecc_sk, ecc->scalar_len, "ECC   seckey:");
+      log_printhex (ecc_ct, ecc->point_len, "ECC    ephem:");
+    }
+
+  err = gcry_kem_decap (ecc->algo, ecc_sk, ecc->scalar_len,
+                        ecc_ct, ecc->point_len, ecc_ecdh, ecc->point_len, NULL, 0);
   if (err)
     {
       if (opt.verbose)
@@ -351,14 +443,21 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
       goto leave;
     }
 
-  err = gnupg_ecc_kem_kdf (ecc_ss, 32, GCRY_MD_SHA3_256,
-                           ecc_ecdh, 32, ecc_ct, 32, ecc_pk, 32);
+  if (DBG_CRYPTO)
+    log_printhex (ecc_ecdh, ecc->point_len, "ECC     ecdh:");
+
+  err = gnupg_ecc_kem_kdf (ecc_ss, ecc->shared_len, ecc->hash_algo,
+                           ecc_ecdh, ecc->point_len, ecc_ct, ecc->point_len,
+                           ecc_pk, ecc->point_len);
   if (err)
     {
       if (opt.verbose)
         log_info ("%s: kdf for ECC failed\n", __func__);
       goto leave;
     }
+
+  if (DBG_CRYPTO)
+    log_printhex (ecc_ss, ecc->shared_len, "ECC   shared:");
 
   /* Secondly, PQC part.  For now, we assume ML-KEM.  */
   err = gcry_sexp_extract_param (s_skey1, NULL, "/s", &mlkem_sk_mpi, NULL);
@@ -369,27 +468,45 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
       goto leave;
     }
   mlkem_sk = gcry_mpi_get_opaque (mlkem_sk_mpi, &nbits);
-  len = (nbits+7)/8;
-  if (len != GCRY_KEM_MLKEM768_SECKEY_LEN)
+  mlkem_sk_len = (nbits+7)/8;
+  if (mlkem_sk_len == GCRY_KEM_MLKEM512_SECKEY_LEN)
+    {
+      mlkem_kem_algo = GCRY_KEM_MLKEM512;
+      mlkem_ss_len   = GCRY_KEM_MLKEM512_SHARED_LEN;
+      mlkem_ct_len   = GCRY_KEM_MLKEM512_CIPHER_LEN;
+    }
+  else if (mlkem_sk_len == GCRY_KEM_MLKEM768_SECKEY_LEN)
+    {
+      mlkem_kem_algo = GCRY_KEM_MLKEM768;
+      mlkem_ss_len   = GCRY_KEM_MLKEM768_SHARED_LEN;
+      mlkem_ct_len   = GCRY_KEM_MLKEM768_CIPHER_LEN;
+    }
+  else if (mlkem_sk_len == GCRY_KEM_MLKEM1024_SECKEY_LEN)
+    {
+      mlkem_kem_algo = GCRY_KEM_MLKEM1024;
+      mlkem_ss_len   = GCRY_KEM_MLKEM1024_SHARED_LEN;
+      mlkem_ct_len   = GCRY_KEM_MLKEM1024_CIPHER_LEN;
+    }
+  else
     {
       if (opt.verbose)
-        log_info ("%s: PQ key length invalid (%zu)\n", __func__, len);
+        log_info ("%s: PQ key length invalid (%zu)\n", __func__, mlkem_sk_len);
       err = gpg_error (GPG_ERR_INV_DATA);
       goto leave;
     }
+
   mlkem_ct = gcry_mpi_get_opaque (mlkem_ct_mpi, &nbits);
   len = (nbits+7)/8;
-  if (len != GCRY_KEM_MLKEM768_CIPHER_LEN)
+  if (len != mlkem_ct_len)
     {
       if (opt.verbose)
-        log_info ("%s: PQ cipher text length invalid (%zu)\n", __func__, len);
+        log_info ("%s: PQ cipher text length invalid (%zu)\n",
+                  __func__, mlkem_ct_len);
       err = gpg_error (GPG_ERR_INV_DATA);
       goto leave;
     }
-  err = gcry_kem_decap (GCRY_KEM_MLKEM768,
-                        mlkem_sk, GCRY_KEM_MLKEM768_SECKEY_LEN,
-                        mlkem_ct, GCRY_KEM_MLKEM768_CIPHER_LEN,
-                        mlkem_ss, GCRY_KEM_MLKEM768_SHARED_LEN,
+  err = gcry_kem_decap (mlkem_kem_algo, mlkem_sk, mlkem_sk_len,
+                        mlkem_ct, mlkem_ct_len, mlkem_ss, mlkem_ss_len,
                         NULL, 0);
   if (err)
     {
@@ -403,9 +520,8 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
 
   /* Then, combine two shared secrets and ciphertexts into one KEK */
   err = gnupg_kem_combiner (kek, kek_len,
-                            ecc_ss, 32, ecc_ct, 32,
-                            mlkem_ss, GCRY_KEM_MLKEM768_SHARED_LEN,
-                            mlkem_ct, GCRY_KEM_MLKEM768_CIPHER_LEN,
+                            ecc_ss, ecc->shared_len, ecc_ct, ecc->point_len,
+                            mlkem_ss, mlkem_ss_len, mlkem_ct, mlkem_ct_len,
                             fixed_info.data, fixed_info.size);
   if (err)
     {
@@ -415,8 +531,8 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
     }
 
   mpi_release (ecc_ct_mpi);
-  mpi_release (mlkem_ct_mpi);
   ecc_ct_mpi = NULL;
+  mpi_release (mlkem_ct_mpi);
   mlkem_ct_mpi = NULL;
 
   if (DBG_CRYPTO)
@@ -456,6 +572,13 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
   put_membuf (outbuf, ")", 2);
 
  leave:
+  wipememory (ecc_sk, sizeof ecc_sk);
+  wipememory (ecc_ecdh, sizeof ecc_ecdh);
+  wipememory (ecc_ss, sizeof ecc_ss);
+  wipememory (mlkem_ss, sizeof mlkem_ss);
+  wipememory (kek, sizeof kek);
+  wipememory (sessionkey, sizeof sessionkey);
+
   mpi_release (mlkem_sk_mpi);
   mpi_release (ecc_pk_mpi);
   mpi_release (ecc_sk_mpi);
@@ -464,12 +587,10 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
   mpi_release (encrypted_sessionkey_mpi);
   gcry_free (fixed_info.data);
   gcry_sexp_release (curve);
+  xfree (curve_name);
   gcry_sexp_release (s_skey0);
   gcry_sexp_release (s_skey1);
   return err;
-#else
-  return gpg_error (GPG_ERR_NOT_IMPLEMENTED);
-#endif
 }
 
 /* DECRYPT the encrypted stuff (like encrypted session key) in

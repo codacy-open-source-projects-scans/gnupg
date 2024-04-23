@@ -136,6 +136,7 @@ enum cmd_and_opt_values
     aQuickSetExpire,
     aQuickSetPrimaryUid,
     aQuickUpdatePref,
+    aQuickSetOwnertrust,
     aListConfig,
     aListGcryptConfig,
     aGPGConfList,
@@ -206,6 +207,7 @@ enum cmd_and_opt_values
     oWithV5Fingerprint,
     oWithFingerprint,
     oWithSubkeyFingerprint,
+    oWithoutSubkeyFingerprint,
     oWithICAOSpelling,
     oWithKeygrip,
     oWithKeyScreening,
@@ -503,6 +505,7 @@ static gpgrt_opt_t opts[] = {
               N_("quickly set a new expiration date")),
   ARGPARSE_c (aQuickSetPrimaryUid,  "quick-set-primary-uid", "@"),
   ARGPARSE_c (aQuickUpdatePref,  "quick-update-pref", "@"),
+  ARGPARSE_c (aQuickSetOwnertrust,  "quick-set-ownertrust", "@"),
   ARGPARSE_c (aFullKeygen,  "full-generate-key" ,
               N_("full featured key pair generation")),
   ARGPARSE_c (aFullKeygen,  "full-gen-key", "@"),
@@ -824,6 +827,7 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_s_n (oWithFingerprint, "with-fingerprint", "@"),
   ARGPARSE_s_n (oWithSubkeyFingerprint, "with-subkey-fingerprint", "@"),
   ARGPARSE_s_n (oWithSubkeyFingerprint, "with-subkey-fingerprints", "@"),
+  ARGPARSE_s_n (oWithoutSubkeyFingerprint, "without-subkey-fingerprint", "@"),
   ARGPARSE_s_n (oWithICAOSpelling, "with-icao-spelling", "@"),
   ARGPARSE_s_n (oWithKeygrip,     "with-keygrip", "@"),
   ARGPARSE_s_n (oWithKeyScreening,"with-key-screening", "@"),
@@ -2109,6 +2113,8 @@ parse_list_options(char *str)
        N_("show preferences")},
       {"show-pref-verbose", LIST_SHOW_PREF_VERBOSE, NULL,
        N_("show preferences")},
+      {"show-ownertrust", LIST_SHOW_OWNERTRUST, NULL,
+       N_("show ownertrust")},
       {"show-only-fpr-mbox",LIST_SHOW_ONLY_FPR_MBOX, NULL,
        NULL},
       {"sort-sigs", LIST_SORT_SIGS, NULL,
@@ -2503,6 +2509,7 @@ main (int argc, char **argv)
     opt.passphrase_repeat = 1;
     opt.emit_version = 0;
     opt.weak_digests = NULL;
+    opt.with_subkey_fingerprint = 1;
     opt.compliance = CO_GNUPG;
 
     /* Check special options given on the command line.  */
@@ -2719,6 +2726,7 @@ main (int argc, char **argv)
 	  case aQuickSetExpire:
 	  case aQuickSetPrimaryUid:
 	  case aQuickUpdatePref:
+	  case aQuickSetOwnertrust:
 	  case aExportOwnerTrust:
 	  case aImportOwnerTrust:
           case aRebuildKeydbCaches:
@@ -2908,6 +2916,9 @@ main (int argc, char **argv)
             break;
 	  case oWithSubkeyFingerprint:
             opt.with_subkey_fingerprint = 1;
+            break;
+	  case oWithoutSubkeyFingerprint:
+            opt.with_subkey_fingerprint = 0;
             break;
 	  case oWithICAOSpelling:
             opt.with_icao_spelling = 1;
@@ -4399,6 +4410,7 @@ main (int argc, char **argv)
       case aQuickRevUid:
       case aQuickSetPrimaryUid:
       case aQuickUpdatePref:
+      case aQuickSetOwnertrust:
       case aFullKeygen:
       case aKeygen:
       case aImport:
@@ -4917,6 +4929,15 @@ main (int argc, char **argv)
           if (argc != 1)
             wrong_args ("--quick-update-pref USER-ID");
           keyedit_quick_update_pref (ctrl, *argv);
+        }
+	break;
+
+      case aQuickSetOwnertrust:
+        {
+          if (argc != 2)
+            wrong_args ("--quick-set-ownertrust USER-ID"
+                        " [enable|disable|full|...]");
+          keyedit_quick_set_ownertrust (ctrl, argv[0], argv[1]);
         }
 	break;
 
