@@ -43,58 +43,7 @@
 #
 # The information required to sign the tarballs and binaries
 # are expected in the developer specific file ~/.gnupg-autogen.rc".
-# Here is an example:
-#--8<---------------cut here---------------start------------->8---
-# # Location of the released tarball archives.  Note that this is an
-# # internal archive and before uploading this to the public server,
-# # manual tests should be run and the git release tagged and pushed.
-# # This is greped by the Makefile.
-# RELEASE_ARCHIVE=foo@somehost:tarball-archive
-#
-# # The key used to sign the GnuPG sources.
-# # This is greped by the Makefile.
-# RELEASE_SIGNKEY=6DAA6E64A76D2840571B4902528897B826403ADA
-#
-# # The key used to sign the VERSION files of some MSI installers.
-# VERSION_SIGNKEY=02F38DFF731FF97CB039A1DA549E695E905BA208
-#
-# # For signing Windows binaries we need to employ a Windows machine.
-# # We connect to this machine via ssh and take the connection
-# # parameters via .ssh/config. For example a VM could be specified
-# # like this:
-# #
-# #   Host authenticode-signhost
-# #        HostName localhost
-# #        Port 27042
-# #        User gpgsign
-# #
-# # Depending on the used token it might be necessary to allow single
-# # signon and unlock the token before running the make.  The following
-# # variable references this entry.  This is greped by the Makefile.
-# AUTHENTICODE_SIGNHOST=authenticode-signhost
-#
-# # The name of the signtool as used on Windows.
-# # This is greped by the Makefile.
-# AUTHENTICODE_TOOL="C:\Program Files (x86)\Windows Kits\10\bin\signtool.exe"
-#
-# # The URL for the timestamping service
-# AUTHENTICODE_TSURL=http://rfc3161timestamp.globalsign.com/advanced
-#
-# # To use osslsigncode the follwing entries are required and
-# # an empty string must be given for AUTHENTICODE_SIGNHOST.
-# # They are greped by the Makefile.
-# AUTHENTICODE_KEY=/home/foo/.gnupg/my-authenticode-key.p12
-# AUTHENTICODE_CERTS=/home/foo/.gnupg/my-authenticode-certs.pem
-#
-# # If a smartcard is used for the Authenticode signature these
-# # entries are required instead:
-# AUTHENTICODE_KEY=card
-# AUTHENTICODE_CERTS=/home/foo/.gnupg/my_authenticode_cert.pem
-# OSSLSIGNCODE=/usr/bin/osslsigncode
-# OSSLPKCS11ENGINE=/usr/lib/x86_64-linux-gnu/engines-1.1/pkcs11.so
-# SCUTEMODULE=/usr/local/lib/scute.so
-#
-#--8<---------------cut here---------------end--------------->8---
+# Use "gpg-authcode-sign.sh --template" to create a template.
 
 
 # We need to know our own name.
@@ -124,6 +73,7 @@ help:
 	@echo 'Use WIXPREFIX to provide the WIX binaries for the MSI package.'
 	@echo '    Using WIX also requires wine with installed wine mono.'
 	@echo '    See help-wixlib for more information'
+	@echo 'Set W32VERSION=w64 to build a 64 bit Windows version.'
 
 help-wixlib:
 	@echo 'The buildsystem can create a wixlib to build MSI packages.'
@@ -208,8 +158,11 @@ w32-release-offline: check-tools
 #          to "this" from the unpacked sources.
 WHAT=git
 
-# Set target to "native" or "w32"
+# Set target to "native" or "w32".
 TARGETOS=
+
+# To build a 64 bit Windows version also change this to "w64"
+W32VERSION=w32
 
 # Set to 1 to use a pre-installed swdb.lst instead of the online version.
 CUSTOM_SWDB=0
@@ -231,6 +184,8 @@ TARBALLS=$(shell pwd)/../tarballs
 MAKE_J=6
 
 # Name to use for the w32 installer and sources
+
+
 INST_NAME=gnupg-w32
 
 # Use this to override the installaion directory for native builds.
@@ -246,14 +201,6 @@ PATCHELF := $(shell patchelf --version 2>/dev/null >/dev/null || echo "echo plea
 define READ_AUTOGEN_template
 $(1) = $$(shell grep '^[[:blank:]]*$(1)[[:blank:]]*=' $$$$HOME/.gnupg-autogen.rc|cut -d= -f2|xargs)
 endef
-$(eval $(call READ_AUTOGEN_template,AUTHENTICODE_SIGNHOST))
-$(eval $(call READ_AUTOGEN_template,AUTHENTICODE_TOOL))
-$(eval $(call READ_AUTOGEN_template,AUTHENTICODE_TSURL))
-$(eval $(call READ_AUTOGEN_template,AUTHENTICODE_KEY))
-$(eval $(call READ_AUTOGEN_template,AUTHENTICODE_CERTS))
-$(eval $(call READ_AUTOGEN_template,OSSLSIGNCODE))
-$(eval $(call READ_AUTOGEN_template,OSSLPKCS11ENGINE))
-$(eval $(call READ_AUTOGEN_template,SCUTEMODULE))
 $(eval $(call READ_AUTOGEN_template,OVERRIDE_TARBALLS))
 
 
@@ -330,7 +277,12 @@ endif
 # Packages which are additionally build for 64 bit Windows.  They are
 # only used for gpgex and thus we need to build them only if we want
 # a full installer.
-speedo_w64_spkgs  =
+ifeq ($(W32VERSION),w64)
+  # Keep this empty
+  speedo_w64_spkgs =
+else
+  speedo_w64_spkgs =
+endif
 
 # Packages which use the gnupg autogen.sh build style
 speedo_gnupg_style = \
@@ -362,7 +314,7 @@ endif
 # Version numbers of the released packages
 gnupg_ver_this = $(shell cat $(topsrc)/VERSION)
 
-gnupg_ver        := $(shell awk '$$1=="gnupg24_ver" {print $$2}' swdb.lst)
+gnupg_ver        := $(shell awk '$$1=="gnupg26_ver" {print $$2}' swdb.lst)
 
 libgpg_error_ver := $(shell awk '$$1=="libgpg_error_ver" {print $$2}' swdb.lst)
 libgpg_error_sha1:= $(shell awk '$$1=="libgpg_error_sha1" {print $$2}' swdb.lst)
@@ -409,7 +361,7 @@ sqlite_sha1 := $(shell awk '$$1=="sqlite_sha1_gz" {print $$2}' swdb.lst)
 sqlite_sha2 := $(shell awk '$$1=="sqlite_sha2_gz" {print $$2}' swdb.lst)
 
 
-$(info Information from the version database)
+$(info Information from the version database:)
 $(info GnuPG ..........: $(gnupg_ver) (building $(gnupg_ver_this)))
 $(info GpgRT ..........: $(libgpg_error_ver))
 $(info Npth ...........: $(npth_ver))
@@ -423,6 +375,21 @@ $(info NtbTLS .. ......: $(ntbtls_ver))
 $(info GPGME ..........: $(gpgme_ver))
 $(info Pinentry .......: $(pinentry_ver))
 endif
+
+$(info Information for this run:)
+$(info Build type .....: $(WHAT))
+$(info Target .........: $(TARGETOS))
+ifeq ($(TARGETOS),w32)
+ifeq ($(W32VERSION),w64)
+  $(info Windows version : 64 bit)
+else
+  $(info Windows version : 32 bit)
+ifneq ($(W32VERSION),w32)
+  $(error W32VERSION is not set to a proper value: Use only w32 or w64)
+endif
+endif
+endif
+
 
 # Version number for external packages
 pkg_config_ver = 0.23
@@ -514,8 +481,8 @@ speedo_pkg_gettext_tar    = $(pkg2rep)/gettext-$(gettext_ver).tar.gz
 
 speedo_pkg_npth_configure = --enable-static
 
-speedo_pkg_libgpg_error_configure = --enable-static --enable-install-gpg-error-config
-speedo_pkg_w64_libgpg_error_configure = --enable-static --enable-install-gpg-error-config
+speedo_pkg_libgpg_error_configure = --enable-static
+speedo_pkg_w64_libgpg_error_configure = --enable-static
 
 speedo_pkg_libassuan_configure = --enable-static
 speedo_pkg_w64_libassuan_configure = --enable-static
@@ -651,12 +618,21 @@ report: report-speedo
 
 clean: clean-speedo
 
+
+ifeq ($(W32VERSION),w64)
+W32CC_PREFIX = x86_64
+else
+W32CC_PREFIX = i686
+endif
+
 ifeq ($(TARGETOS),w32)
-STRIP = i686-w64-mingw32-strip
+STRIP = $(W32CC_PREFIX)-w64-mingw32-strip
+W32STRIP32 = i686-w64-mingw32-strip
 else
 STRIP = strip
 endif
-W32CC = i686-w64-mingw32-gcc
+W32CC = $(W32CC_PREFIX)-w64-mingw32-gcc
+W32CC32 = i686-w64-mingw32-gcc
 
 -include config.mk
 
@@ -698,9 +674,9 @@ ifneq ($(TARGETOS),)
 # Determine build and host system
 build := $(shell $(topsrc)/autogen.sh --silent --print-build)
 ifeq ($(TARGETOS),w32)
-  speedo_autogen_buildopt := --build-w32
+  speedo_autogen_buildopt := --build-$(W32VERSION)
   speedo_autogen_buildopt6 := --build-w64
-  host := $(shell $(topsrc)/autogen.sh --silent --print-host --build-w32)
+  host := $(shell $(topsrc)/autogen.sh --silent --print-host --build-$(W32VERSION))
   host6:= $(shell $(topsrc)/autogen.sh --silent --print-host --build-w64)
   speedo_host_build_option := --host=$(host) --build=$(build)
   speedo_host_build_option6 := --host=$(host6) --build=$(build)
@@ -924,7 +900,7 @@ else ifneq ($(findstring $(1),$(speedo_gnupg_style)),)
 	 mkdir "$$$${pkgbdir}";				\
 	 cd "$$$${pkgbdir}";		        	\
          if [ -n "$(speedo_autogen_buildopt)" ]; then   \
-            eval AUTOGEN_SH_SILENT=1 w32root="$(idir)"  \
+            eval AUTOGEN_SH_SILENT=1 $(W32VERSION)root="$(idir)"  \
                "$$$${pkgsdir}/autogen.sh"               \
                $(speedo_autogen_buildopt)            	\
                $$$${pkgcfg} $$$${pkgextracflags}; 	\
@@ -1238,13 +1214,13 @@ $(bdir)/README.txt: $(bdir)/NEWS.tmp $(topsrc)/README $(w32src)/README.txt \
 
 $(bdir)/g4wihelp.dll: $(w32src)/g4wihelp.c $(w32src)/exdll.h $(w32src)/exdll.c
 	(set -e; cd $(bdir); \
-         $(W32CC) -DUNICODE -static-libgcc -I . -O2 -c \
+         $(W32CC32) -DUNICODE -static-libgcc -I . -O2 -c \
                           -o exdll.o $(w32src)/exdll.c; \
-	 $(W32CC) -DUNICODE -static-libgcc -I. -shared -O2 \
+	 $(W32CC32) -DUNICODE -static-libgcc -I. -shared -O2 \
                           -o g4wihelp.dll $(w32src)/g4wihelp.c exdll.o \
 	                  -lwinmm -lgdi32 -luserenv \
                           -lshell32 -loleaut32 -lshlwapi -lmsimg32; \
-	 $(STRIP) g4wihelp.dll)
+	 $(W32STRIP32) g4wihelp.dll)
 
 w32_insthelpers: $(bdir)/g4wihelp.dll
 
@@ -1351,35 +1327,13 @@ endef
 
 # Sign the file $1 and save the result as $2
 define AUTHENTICODE_sign
-   set -e;\
-   if [ -n "$(AUTHENTICODE_SIGNHOST)" ]; then \
-     echo "speedo: Signing via host $(AUTHENTICODE_SIGNHOST)";\
-     scp $(1) "$(AUTHENTICODE_SIGNHOST):a.exe" ;\
-     ssh "$(AUTHENTICODE_SIGNHOST)" '$(AUTHENTICODE_TOOL)' sign \
-        /a /n '"g10 Code GmbH"' \
-        /tr '$(AUTHENTICODE_TSURL)' /td sha256 \
-        /fd sha256 /du https://gnupg.org a.exe ;\
-     scp "$(AUTHENTICODE_SIGNHOST):a.exe" $(2);\
-     echo "speedo: signed file is '$(2)'" ;\
-   elif [ "$(AUTHENTICODE_KEY)" = card ]; then \
-     echo "speedo: Signing using a card: '$(1)'";\
-     $(OSSLSIGNCODE) sign \
-       -pkcs11engine $(OSSLPKCS11ENGINE) \
-       -pkcs11module $(SCUTEMODULE) \
-       -certs $(AUTHENTICODE_CERTS) \
-       -h sha256 -n GnuPG -i https://gnupg.org \
-       -ts $(AUTHENTICODE_TSURL) \
-       -in $(1) -out $(2).tmp ; mv $(2).tmp $(2) ; \
-   elif [ -e "$(AUTHENTICODE_KEY)" ]; then \
-     echo "speedo: Signing using key $(AUTHENTICODE_KEY)";\
-     osslsigncode sign -certs $(AUTHENTICODE_CERTS) \
-       -pkcs12 $(AUTHENTICODE_KEY) -askpass \
-       -ts "$(AUTHENTICODE_TSURL)" \
-       -h sha256 -n GnuPG -i https://gnupg.org \
-       -in $(1) -out $(2) ;\
+   (set -e; \
+    if gpg-authcode-sign.sh --version >/dev/null; then \
+     gpg-authcode-sign.sh "$(1)" "$(2)"; \
    else \
-     echo "speedo: WARNING: Binaries are not signed"; \
-   fi
+     echo 2>&1 "warning: Please install gpg-authcode-sign.sh to sign files." ;\
+     [ "$(1)" != "$(2)" ] && cp "$(1)" "$(2)" ;\
+   fi)
 endef
 
 # Help target for testing to sign a file.

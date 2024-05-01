@@ -380,7 +380,7 @@ divert_pksign (ctrl_t ctrl, const unsigned char *grip,
 /* Decrypt the value given as an s-expression in CIPHER using the
    key identified by SHADOW_INFO and return the plaintext in an
    allocated buffer in R_BUF.  The padding information is stored at
-   R_PADDING with -1 for not known.  */
+   R_PADDING with -1 for not known, when it's not NULL.  */
 int
 divert_pkdecrypt (ctrl_t ctrl,
                   const unsigned char *grip,
@@ -399,7 +399,8 @@ divert_pkdecrypt (ctrl_t ctrl,
 
   bin2hex (grip, 20, hexgrip);
 
-  *r_padding = -1;
+  if (r_padding)
+    *r_padding = -1;
   s = cipher;
   if (*s != '(')
     return gpg_error (GPG_ERR_INV_SEXP);
@@ -483,6 +484,34 @@ divert_pkdecrypt (ctrl_t ctrl,
       *r_len = plaintextlen;
     }
   return rc;
+}
+
+gpg_error_t
+agent_card_ecc_kem (ctrl_t ctrl, const unsigned char *ecc_ct,
+                    size_t ecc_point_len, unsigned char *ecc_ecdh)
+{
+  gpg_error_t err = 0;
+  char *ecdh = NULL;
+  size_t len;
+  int rc;
+
+  rc = agent_card_pkdecrypt (ctrl, ctrl->keygrip, getpin_cb, ctrl, NULL,
+                             ecc_ct, ecc_point_len, &ecdh, &len, NULL);
+  if (rc)
+    return rc;
+
+  if (len != ecc_point_len)
+    {
+      if (opt.verbose)
+        log_info ("%s: ECC result length invalid (%zu != %zu)\n",
+                  __func__, len, ecc_point_len);
+      return gpg_error (GPG_ERR_INV_DATA);
+    }
+  else
+    memcpy (ecc_ecdh, ecdh, len);
+
+  xfree (ecdh);
+  return err;
 }
 
 
