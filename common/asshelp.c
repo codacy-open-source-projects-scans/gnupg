@@ -525,11 +525,10 @@ start_new_service (assuan_context_t *r_ctx,
         {
 #ifdef HAVE_W32_SYSTEM
           err = gnupg_process_spawn (program? program : program_name, argv,
-                                     GNUPG_PROCESS_DETACHED,
-                                     NULL, NULL, NULL);
+                                     GNUPG_PROCESS_DETACHED, NULL, NULL);
 #else /*!W32*/
           err = gnupg_process_spawn (program? program : program_name, argv,
-                                     0, NULL, NULL, NULL);
+                                     0, NULL, NULL);
 #endif /*!W32*/
           if (err)
             log_error ("failed to start %s '%s': %s\n",
@@ -696,7 +695,7 @@ get_assuan_server_version (assuan_context_t ctx, int mode, char **r_version)
 
 /* Print a warning if the server's version number is less than our
  * version number.  Returns an error code on a connection problem.
- * CTX is the Assuan context, SERVERNAME is the name of teh server,
+ * CTX is the Assuan context, SERVERNAME is the name of the server,
  * STATUS_FUNC and STATUS_FUNC_DATA is a callback to emit status
  * messages.  If PRINT_HINTS is set additional hints are printed.  For
  * MODE see get_assuan_server_version.  */

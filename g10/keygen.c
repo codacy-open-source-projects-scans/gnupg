@@ -97,6 +97,7 @@ enum para_name {
   pKEYSERVER,
   pKEYGRIP,
   pSUBKEYGRIP,
+  pADSK,        /* this uses u.adsk  */
   pVERSION,     /* Desired version of the key packet.  */
   pSUBVERSION,  /* Ditto for the subpacket.  */
   pCARDKEY      /* The keygrips have been taken from active card (bool).  */
@@ -112,6 +113,7 @@ struct para_data_s {
         int abool;
         unsigned int usage;
         struct revocation_key revkey;
+        PKT_public_key *adsk;  /* used with key == pADSK */
         char value[1];
     } u;
 };
@@ -172,6 +174,8 @@ static int mdc_available;
 static int ks_modify;
 static int aead_available;
 
+static void release_parameter_list (struct para_data_s *r);
+static struct para_data_s *prepare_adsk (ctrl_t ctrl, const char *name);
 static gpg_error_t parse_algo_usage_expire (ctrl_t ctrl, int for_subkey,
                                      const char *algostr, const char *usagestr,
                                      const char *expirestr,
@@ -1174,6 +1178,74 @@ make_backsig (ctrl_t ctrl, PKT_signature *sig, PKT_public_key *pk,
 	  iobuf_close (backsig_out);
 	}
     }
+
+  return err;
+}
+
+
+/* This function should be called to make sure that
+ * opt.def_new_key_adsks has no duplicates and that tehre is no '!'
+ * suffix.  We don't do this during normal option processing because
+ * this list is only needed for a very few operations.  Callingit
+ * twice does not harm.  Users of the option list should skip empty
+ * items.  */
+void
+keygen_prepare_new_key_adsks (void)
+{
+  strlist_t sl, slr;
+  char *p;
+
+  for (sl = opt.def_new_key_adsks; sl; sl = sl->next)
+    {
+      if (!*sl->d)
+        continue;
+      p = strchr (sl->d, '!');
+      if (p)
+        *p = 0;
+      for (slr = opt.def_new_key_adsks; slr != sl; slr = slr->next)
+        if (!ascii_strcasecmp (sl->d, slr->d))
+          {
+            *sl->d = 0; /* clear fpr to mark this as a duplicate.  */
+            break;
+          }
+    }
+}
+
+
+/* Append all default ADSKs to the KEYBLOCK but ignore those which are
+ * already on that keyblock.  Returns 0 if any key has been added;
+ * GPG_ERR_FALSE if no key was added or any other error code.  */
+gpg_error_t
+append_all_default_adsks (ctrl_t ctrl, kbnode_t keyblock)
+{
+  gpg_error_t err = 0;
+  int any_done = 0;
+  strlist_t sl;
+  struct para_data_s *para;
+  byte adskfpr[MAX_FINGERPRINT_LEN];
+  size_t adskfprlen;
+
+  keygen_prepare_new_key_adsks ();
+  for (sl = opt.def_new_key_adsks; sl && !err; sl = sl->next)
+    {
+      if (!*sl->d)
+        continue;
+      para = prepare_adsk (ctrl, sl->d);
+      if (para)
+        {
+          fingerprint_from_pk (para->u.adsk, adskfpr, &adskfprlen);
+          if (!has_key_with_fingerprint (keyblock, adskfpr, adskfprlen))
+            {
+              err = append_adsk_to_key (ctrl, keyblock, para->u.adsk);
+              if (!err)
+                any_done = 1;
+            }
+          release_parameter_list (para);
+        }
+    }
+
+  if (!err && !any_done)
+    err = gpg_error (GPG_ERR_FALSE);
 
   return err;
 }
@@ -4294,6 +4366,9 @@ release_parameter_list (struct para_data_s *r)
       r2 = r->next;
       if (r->key == pPASSPHRASE && *r->u.value)
         wipememory (r->u.value, strlen (r->u.value));
+      else if (r->key == pADSK)
+        free_public_key (r->u.adsk);
+
       xfree (r);
     }
 }
@@ -4470,7 +4545,7 @@ parse_parameter_usage (const char *fname,
 
 /* Parse the revocation key specified by NAME, check that the public
  * key exists (so that we can get the required public key algorithm),
- * and return a parameter wit the revocation key information.  On
+ * and return a parameter with the revocation key information.  On
  * error print a diagnostic and return NULL.  */
 static struct para_data_s *
 prepare_desig_revoker (ctrl_t ctrl, const char *name)
@@ -4499,7 +4574,7 @@ prepare_desig_revoker (ctrl_t ctrl, const char *name)
 
   revoker_pk = xcalloc (1, sizeof *revoker_pk);
   revoker_pk->req_usage = PUBKEY_USAGE_CERT;
-  err = get_pubkey_byname (ctrl, GET_PUBKEY_NO_AKL,
+  err = get_pubkey_byname (ctrl, GET_PUBKEY_TRY_LDAP,
                            NULL, revoker_pk, name, NULL, NULL, 1);
   if (err)
     goto leave;
@@ -4526,6 +4601,59 @@ prepare_desig_revoker (ctrl_t ctrl, const char *name)
   if (err)
     log_error ("invalid revocation key '%s': %s\n", name, gpg_strerror (err));
   free_public_key (revoker_pk);
+  return para;
+}
+
+
+/* Parse an ADSK specified by NAME, check that the public key exists
+ * and return a parameter with the adsk information.  On error print a
+ * diagnostic and return NULL.  */
+static struct para_data_s *
+prepare_adsk (ctrl_t ctrl, const char *name)
+{
+  gpg_error_t err;
+  char *namebuffer = NULL;
+  struct para_data_s *para = NULL;
+  KEYDB_SEARCH_DESC desc;
+  PKT_public_key *adsk_pk = NULL;
+  char *p;
+
+  if (classify_user_id (name, &desc, 1)
+      || desc.mode != KEYDB_SEARCH_MODE_FPR)
+    {
+      log_info (_("\"%s\" is not a fingerprint\n"), name);
+      err = gpg_error (GPG_ERR_INV_NAME);
+      goto leave;
+    }
+
+  /* Force searching for that exact fingerprint.  */
+  if (!strchr (name, '!'))
+    {
+      namebuffer = xstrconcat (name, "!", NULL);
+      name = namebuffer;
+    }
+
+  adsk_pk = xcalloc (1, sizeof *adsk_pk);
+  adsk_pk->req_usage = PUBKEY_USAGE_ENC;
+  err = get_pubkey_byname (ctrl, GET_PUBKEY_TRY_LDAP,
+                           NULL, adsk_pk, name, NULL, NULL, 1);
+  if (err)
+    goto leave;
+
+  para = xcalloc (1, sizeof *para);
+  para->key = pADSK;
+  para->u.adsk = adsk_pk;
+  adsk_pk = NULL;
+
+ leave:
+  if (err)
+    {
+      if (namebuffer && (p=strchr (namebuffer, '!')))
+        *p = 0; /* Strip the ! for the diagnostic.  */
+      log_error ("invalid ADSK '%s' specified: %s\n", name, gpg_strerror (err));
+    }
+  free_public_key (adsk_pk);
+  xfree (namebuffer);
   return para;
 }
 
@@ -4614,11 +4742,17 @@ get_parameter_uint( struct para_data_s *para, enum para_name key )
 }
 
 static struct revocation_key *
-get_parameter_revkey (struct para_data_s *para, enum para_name key,
-                      unsigned int idx)
+get_parameter_revkey (struct para_data_s *para, unsigned int idx)
 {
-  struct para_data_s *r = get_parameter_idx (para, key, idx);
+  struct para_data_s *r = get_parameter_idx (para, pREVOKER, idx);
   return r? &r->u.revkey : NULL;
+}
+
+static PKT_public_key *
+get_parameter_adsk (struct para_data_s *para, unsigned int idx)
+{
+  struct para_data_s *r = get_parameter_idx (para, pADSK, idx);
+  return r? r->u.adsk : NULL;
 }
 
 static int
@@ -4790,10 +4924,27 @@ proc_parameter_file (ctrl_t ctrl, struct para_data_s *para, const char *fname,
   if (parse_revocation_key (fname, para, pREVOKER))
     return -1;
 
-  /* Check and appened revokers from the config file.  */
+  /* Check and append revokers from the config file.  */
   for (sl = opt.desig_revokers; sl; sl = sl->next)
     {
       r = prepare_desig_revoker (ctrl, sl->d);
+      if (!r)
+        return -1;
+      append_to_parameter (para, r);
+     }
+
+
+  /* Check and append ADSKs from the config file.  While doing this
+   * also check for duplicate specifications.  In addition we remove
+   * an optional '!' suffix for easier comparing; the suffix is anyway
+   * re-added later.  */
+  keygen_prepare_new_key_adsks ();
+  for (sl = opt.def_new_key_adsks; sl; sl = sl->next)
+    {
+      if (!*sl->d)
+        continue;
+
+      r = prepare_adsk (ctrl, sl->d);
       if (!r)
         return -1;
       append_to_parameter (para, r);
@@ -5957,6 +6108,7 @@ do_generate_keypair (ctrl_t ctrl, struct para_data_s *para,
   int cardkey;
   unsigned int keygen_flags;
   unsigned int idx;
+  int any_adsk = 0;
 
   if (outctrl->dryrun)
     {
@@ -6093,11 +6245,11 @@ do_generate_keypair (ctrl_t ctrl, struct para_data_s *para,
     }
 
   /* Write all signatures specifying designated revokers.  */
-  for (idx=0;
-       !err && (revkey = get_parameter_revkey (para, pREVOKER, idx));
-       idx++)
-    err = write_direct_sig (ctrl, pub_root, pri_psk,
-                            revkey, signtimestamp, cache_nonce);
+  for (idx=0; !err && (revkey = get_parameter_revkey (para, idx)); idx++)
+    {
+      err = write_direct_sig (ctrl, pub_root, pri_psk,
+                              revkey, signtimestamp, cache_nonce);
+    }
 
   if (!err && (s = get_parameter_value (para, pUSERID)))
     {
@@ -6216,6 +6368,25 @@ do_generate_keypair (ctrl_t ctrl, struct para_data_s *para,
       did_sub = 1;
     }
 
+
+  /* Get rid of the first empty packet.  */
+  if (!err)
+    commit_kbnode (&pub_root);
+
+  /* Add ADSKs if any are specified.  */
+  if (!err)
+    {
+      PKT_public_key *adsk;
+
+      for (idx=0; (adsk = get_parameter_adsk (para, idx)); idx++)
+        {
+          err = append_adsk_to_key (ctrl, pub_root, adsk);
+          if (err)
+            break;
+          any_adsk++;
+        }
+    }
+
   if (!err && outctrl->use_files)  /* Direct write to specified files.  */
     {
       err = write_keyblock (outctrl->pub.stream, pub_root);
@@ -6273,9 +6444,6 @@ do_generate_keypair (ctrl_t ctrl, struct para_data_s *para,
 
           gen_standard_revoke (ctrl, pk, cache_nonce);
 
-          /* Get rid of the first empty packet.  */
-          commit_kbnode (&pub_root);
-
           if (!opt.batch)
             {
               tty_printf (_("public and secret key created and signed.\n") );
@@ -6320,6 +6488,9 @@ do_generate_keypair (ctrl_t ctrl, struct para_data_s *para,
                                         PKT_PUBLIC_KEY)->pkt->pkt.public_key;
       print_status_key_created (did_sub? 'B':'P', pk,
                                 get_parameter_value (para, pHANDLE));
+      es_fflush (es_stdout);
+      if (any_adsk)
+        log_info (_("Note: The key has been created with one or more ADSK!\n"));
     }
 
   release_kbnode (pub_root);

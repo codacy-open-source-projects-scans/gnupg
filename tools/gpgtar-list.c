@@ -189,7 +189,7 @@ parse_header (const void *record, const char *filename, tarinfo_t info)
   return header;
 }
 
-/* Parse the extended header.  This funcion may modify BUFFER.  */
+/* Parse the extended header.  This function may modify BUFFER.  */
 static gpg_error_t
 parse_extended_header (const char *fname,
                        char *buffer, size_t buflen, strlist_t *r_exthdr)
@@ -317,14 +317,14 @@ read_header (estream_t stream, tarinfo_t info,
   /* Read the extended header.  */
   if (!hdr->nrecords)
     {
-      /* More than 64k for an extedned header is surely too large.  */
+      /* More than 64k for an extended header is surely too large.  */
       log_info ("%s: warning: empty extended header\n",
                  es_fname_get (stream));
       return 0;
     }
   if (hdr->nrecords > 65536 / RECORDSIZE)
     {
-      /* More than 64k for an extedned header is surely too large.  */
+      /* More than 64k for an extended header is surely too large.  */
       log_error ("%s: extended header too large - skipping\n",
                  es_fname_get (stream));
       return 0;
@@ -365,7 +365,7 @@ read_header (estream_t stream, tarinfo_t info,
     }
 
   xfree (buffer);
-  /* Now tha the extedned header has been read, we read the next
+  /* Now that the extended header has been read, we read the next
    * header without allowing an extended header.  */
   return read_header (stream, info, r_header, NULL);
 }
@@ -474,6 +474,7 @@ gpgtar_list (const char *filename, int decrypt)
       int except[2] = { -1, -1 };
 #endif
       const char **argv;
+      gnupg_spawn_actions_t act = NULL;
 
       ccparray_init (&ccp, 0);
       if (opt.batch)
@@ -513,10 +514,22 @@ gpgtar_list (const char *filename, int decrypt)
           goto leave;
         }
 
+      err = gnupg_spawn_actions_new (&act);
+      if (err)
+        {
+          xfree (argv);
+          goto leave;
+        }
+
+#ifdef HAVE_W32_SYSTEM
+      gnupg_spawn_actions_set_inherit_handles (act, except);
+#else
+      gnupg_spawn_actions_set_inherit_fds (act, except);
+#endif
       err = gnupg_process_spawn (opt.gpg_program, argv,
                                  ((filename ? 0 : GNUPG_PROCESS_STDIN_KEEP)
-                                  | GNUPG_PROCESS_STDOUT_PIPE),
-                                 gnupg_spawn_helper, except, &proc);
+                                  | GNUPG_PROCESS_STDOUT_PIPE), act, &proc);
+      gnupg_spawn_actions_release (act);
       xfree (argv);
       if (err)
         goto leave;

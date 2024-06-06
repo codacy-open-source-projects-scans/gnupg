@@ -336,7 +336,7 @@ do_hash_public_key (gcry_md_hd_t md, PKT_public_key *pk, int use_v5)
             {
               /* Ugly: We need to re-construct the wire format of the
                * key parameter.  It would be easier to use a second
-               * index for pp and nn which we could bump independet of
+               * index for pp and nn which we could bump independent of
                * i.  */
               const char *p;
 
@@ -778,25 +778,24 @@ keyid_from_pk (PKT_public_key *pk, u32 *keyid)
  * keyid is not part of the fingerprint.
  */
 u32
-keyid_from_fingerprint (ctrl_t ctrl, const byte *fprint,
-                        size_t fprint_len, u32 *keyid)
+keyid_from_fingerprint (ctrl_t ctrl, const byte *fpr, size_t fprlen, u32 *keyid)
 {
   u32 dummy_keyid[2];
 
   if( !keyid )
     keyid = dummy_keyid;
 
-  if (fprint_len != 20 && fprint_len != 32)
+  if (fprlen != 20 && fprlen != 32)
     {
       /* This is special as we have to lookup the key first.  */
       PKT_public_key pk;
       int rc;
 
       memset (&pk, 0, sizeof pk);
-      rc = get_pubkey_byfprint (ctrl, &pk, NULL, fprint, fprint_len);
+      rc = get_pubkey_byfpr (ctrl, &pk, NULL, fpr, fprlen);
       if( rc )
         {
-          log_printhex (fprint, fprint_len,
+          log_printhex (fpr, fprlen,
                         "Oops: keyid_from_fingerprint: no pubkey; fpr:");
           keyid[0] = 0;
           keyid[1] = 0;
@@ -806,8 +805,8 @@ keyid_from_fingerprint (ctrl_t ctrl, const byte *fprint,
     }
   else
     {
-      const byte *dp = fprint;
-      if (fprint_len == 20)  /* v4 key */
+      const byte *dp = fpr;
+      if (fprlen == 20)  /* v4 key */
         {
           keyid[0] = buf32_to_u32 (dp+12);
           keyid[1] = buf32_to_u32 (dp+16);
@@ -870,7 +869,7 @@ nbits_from_pk (PKT_public_key *pk)
         case 800:  nbits =  512; break;
         case 1184: nbits =  768; break;
         case 1568: nbits = 1024; break;
-        default:   nbits = 0;    break;  /* Unkown version.  */
+        default:   nbits = 0;    break;  /* Unknown version.  */
         }
       return nbits;
     }
@@ -1093,7 +1092,7 @@ fingerprint_from_pk (PKT_public_key *pk, byte *array, size_t *ret_len)
  * Return a byte array with the fingerprint for the given PK/SK The
  * length of the array is returned in ret_len. Caller must free the
  * array or provide an array of length MAX_FINGERPRINT_LEN.  This
- * version creates a v5 fingerprint even vor v4 keys.
+ * version creates a v5 fingerprint even for v4 keys.
  */
 byte *
 v5_fingerprint_from_pk (PKT_public_key *pk, byte *array, size_t *ret_len)

@@ -699,7 +699,7 @@ current_card_status (ctrl_t ctrl, estream_t fp,
       /* If the fingerprint is all 0xff, the key has no associated
          OpenPGP certificate.  */
       if ( thefpr && !fpr_is_ff (thefpr, thefprlen)
-           && !get_pubkey_byfprint (ctrl, pk, &keyblock, thefpr, thefprlen))
+           && !get_pubkey_byfpr (ctrl, pk, &keyblock, thefpr, thefprlen))
         {
           print_key_info (ctrl, fp, 0, pk, 0);
           print_card_key_info (fp, keyblock);
@@ -917,8 +917,8 @@ fetch_url (ctrl_t ctrl)
         }
       else if (info.fpr1len)
 	{
-          rc = keyserver_import_fprint (ctrl, info.fpr1, info.fpr1len,
-                                        opt.keyserver, 0);
+          rc = keyserver_import_fpr (ctrl, info.fpr1, info.fpr1len,
+                                     opt.keyserver, 0);
 	}
     }
 
@@ -1778,7 +1778,7 @@ card_generate_subkey (ctrl_t ctrl, kbnode_t pub_keyblock)
 /* Store the key at NODE into the smartcard and modify NODE to carry
    the serialno stuff instead of the actual secret key parameters.
    USE is the usage for that key; 0 means any usage.  If
-   PROCESSED_KEYS is not NULL it is a poiter to an strlist which will
+   PROCESSED_KEYS is not NULL it is a pointer to an strlist which will
    be filled with the keygrips of successfully stored keys.  */
 int
 card_store_subkey (KBNODE node, int use, strlist_t *processed_keys)

@@ -1,7 +1,7 @@
 /* getkey.c -  Get a key from the database
  * Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
  *               2007, 2008, 2010  Free Software Foundation, Inc.
- * Copyright (C) 2015, 2016 g10 Code GmbH
+ * Copyright (C) 2015, 2016, 2024 g10 Code GmbH
  *
  * This file is part of GnuPG.
  *
@@ -17,6 +17,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <https://www.gnu.org/licenses/>.
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include <config.h>
@@ -326,7 +327,7 @@ get_pubkey_for_sig (ctrl_t ctrl, PKT_public_key *pk, PKT_signature *sig,
 
   /* First try the ISSUER_FPR info.  */
   fpr = issuer_fpr_raw (sig, &fprlen);
-  if (fpr && !get_pubkey_byfprint (ctrl, pk, NULL, fpr, fprlen))
+  if (fpr && !get_pubkey_byfpr (ctrl, pk, NULL, fpr, fprlen))
     return 0;
 
   /* Fallback to use the ISSUER_KEYID.  */
@@ -446,7 +447,7 @@ leave:
 
 
 /* Same as get_pubkey but if the key was not found the function tries
- * to import it from LDAP.  FIXME: We should not need this but swicth
+ * to import it from LDAP.  FIXME: We should not need this but switch
  * to a fingerprint lookup.  */
 gpg_error_t
 get_pubkey_with_ldap_fallback (ctrl_t ctrl, PKT_public_key *pk, u32 *keyid)
@@ -571,7 +572,7 @@ get_pubkeyblock_for_sig (ctrl_t ctrl, PKT_signature *sig)
 
   /* First try the ISSUER_FPR info.  */
   fpr = issuer_fpr_raw (sig, &fprlen);
-  if (fpr && !get_pubkey_byfprint (ctrl, NULL, &keyblock, fpr, fprlen))
+  if (fpr && !get_pubkey_byfpr (ctrl, NULL, &keyblock, fpr, fprlen))
     return keyblock;
 
   /* Fallback to use the ISSUER_KEYID.  */
@@ -915,6 +916,7 @@ key_byname (ctrl_t ctrl, GETKEY_CTX *retctx, strlist_t namelist,
  *                          auto-key-locate option list!
  *    GET_PUBKEY_NO_LOCAL - Only the auto key locate functionality is
  *                          used and no local search is done.
+ *    GET_PUBKEY_TRY_LDAP - If the key was not found locally try LDAP.
  *
  * If RETCTX is not NULL, then the constructed context is returned in
  * *RETCTX so that getpubkey_next can be used to get subsequent
@@ -967,7 +969,7 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
   int nodefault = 0;
   int anylocalfirst = 0;
   int mechanism_type = AKL_NODEFAULT;
-
+  struct akl *used_akl = opt.auto_key_locate;
 
   /* If RETCTX is not NULL, then RET_KDBHD must be NULL.  */
   log_assert (retctx == NULL || ret_kdbhd == NULL);
@@ -989,12 +991,12 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
       is_mbox = 1;
     }
 
-  /* If we are called due to --locate-external-key Check whether NAME
+  /* If we are called due to --locate-external-key check whether NAME
    * is a fingerprint and then try to lookup that key by configured
    * method which support lookup by fingerprint.  FPRBUF carries the
-   * parsed fingerpint iff IS_FPR is true.  */
+   * parsed fingerprint iff IS_FPR is true.  */
   is_fpr = 0;
-  if (!is_mbox && mode == GET_PUBKEY_NO_LOCAL)
+  if (!is_mbox && (mode == GET_PUBKEY_NO_LOCAL || mode == GET_PUBKEY_TRY_LDAP))
     {
       if (!classify_user_id (name, &fprbuf, 1)
           && fprbuf.mode == KEYDB_SEARCH_MODE_FPR)
@@ -1020,12 +1022,20 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
    * implicitly).  */
   if (mode == GET_PUBKEY_NO_LOCAL)
     nodefault = 1;  /* Auto-key-locate but ignore "local".  */
-  else if (mode != GET_PUBKEY_NO_AKL)
+  else if (mode == GET_PUBKEY_NO_AKL)
+    ;
+  else if (mode == GET_PUBKEY_TRY_LDAP)
+    {
+      static struct akl ldap_only_akl = { AKL_LDAP, NULL, NULL };
+
+      used_akl = &ldap_only_akl;
+    }
+  else
     {
       /* auto-key-locate is enabled.  */
 
       /* nodefault is true if "nodefault" or "local" appear.  */
-      for (akl = opt.auto_key_locate; akl; akl = akl->next)
+      for (akl = used_akl; akl; akl = akl->next)
 	if (akl->type == AKL_NODEFAULT || akl->type == AKL_LOCAL)
 	  {
 	    nodefault = 1;
@@ -1033,7 +1043,7 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
 	  }
       /* anylocalfirst is true if "local" appears before any other
 	 search methods (except "nodefault").  */
-      for (akl = opt.auto_key_locate; akl; akl = akl->next)
+      for (akl = used_akl; akl; akl = akl->next)
 	if (akl->type != AKL_NODEFAULT)
 	  {
 	    if (akl->type == AKL_LOCAL)
@@ -1084,7 +1094,7 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
        * the local keyring).  Since the auto key locate feature is
        * enabled and NAME appears to be an email address, try the auto
        * locate feature.  */
-      for (akl = opt.auto_key_locate; akl; akl = akl->next)
+      for (akl = used_akl; akl; akl = akl->next)
 	{
 	  unsigned char *fpr = NULL;
 	  size_t fpr_len;
@@ -1176,16 +1186,31 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
 	      break;
 
 	    case AKL_LDAP:
-              if (is_fpr)
+	      if (!keyserver_any_configured (ctrl))
                 {
                   mechanism_string = "";
                   rc = GPG_ERR_NO_PUBKEY;
                 }
               else
                 {
-                  mechanism_string = "LDAP";
+                  mechanism_string = is_fpr? "ldap/fpr":"ldap/mbox";
                   glo_ctrl.in_auto_key_retrieve++;
-                  rc = keyserver_import_ldap (ctrl, name, &fpr, &fpr_len);
+                  if (is_fpr)
+                    rc = keyserver_import_fpr (ctrl,
+                                               fprbuf.u.fpr, fprbuf.fprlen,
+                                               opt.keyserver,
+                                               KEYSERVER_IMPORT_FLAG_LDAP);
+                  else
+                    rc = keyserver_import_mbox (ctrl, name, &fpr, &fpr_len,
+                                                opt.keyserver,
+                                                KEYSERVER_IMPORT_FLAG_LDAP);
+                  /* Map error codes because Dirmngr returns NO DATA
+                   * if the keyserver does not have the requested key.
+                   * It returns NO KEYSERVER if no LDAP keyservers are
+                   * configured.  */
+                  if (gpg_err_code (rc) == GPG_ERR_NO_DATA
+                      || gpg_err_code (rc) == GPG_ERR_NO_KEYSERVER)
+                    rc = gpg_error (GPG_ERR_NO_PUBKEY);
                   glo_ctrl.in_auto_key_retrieve--;
                 }
               break;
@@ -1194,8 +1219,8 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
 	      mechanism_string = "NTDS";
 	      glo_ctrl.in_auto_key_retrieve++;
               if (is_fpr)
-                rc = keyserver_import_fprint_ntds (ctrl,
-                                                   fprbuf.u.fpr, fprbuf.fprlen);
+                rc = keyserver_import_fpr_ntds (ctrl,
+                                                fprbuf.u.fpr, fprbuf.fprlen);
               else
                 rc = keyserver_import_ntds (ctrl, name, &fpr, &fpr_len);
 	      glo_ctrl.in_auto_key_retrieve--;
@@ -1212,10 +1237,10 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
 		  glo_ctrl.in_auto_key_retrieve++;
                   if (is_fpr)
                     {
-                      rc = keyserver_import_fprint (ctrl,
-                                                    fprbuf.u.fpr, fprbuf.fprlen,
-                                                    opt.keyserver,
-                                                    KEYSERVER_IMPORT_FLAG_LDAP);
+                      rc = keyserver_import_fpr (ctrl,
+                                                 fprbuf.u.fpr, fprbuf.fprlen,
+                                                 opt.keyserver,
+                                                 KEYSERVER_IMPORT_FLAG_LDAP);
                       /* Map error codes because Dirmngr returns NO
                        * DATA if the keyserver does not have the
                        * requested key.  It returns NO KEYSERVER if no
@@ -1227,7 +1252,7 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
                   else
                     {
                       rc = keyserver_import_mbox (ctrl, name, &fpr, &fpr_len,
-                                                  opt.keyserver);
+                                                  opt.keyserver, 0);
                     }
 		  glo_ctrl.in_auto_key_retrieve--;
 		}
@@ -1247,10 +1272,10 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
 		glo_ctrl.in_auto_key_retrieve++;
                 if (is_fpr)
                   {
-                    rc = keyserver_import_fprint (ctrl,
-                                                  fprbuf.u.fpr, fprbuf.fprlen,
-                                                  opt.keyserver,
-                                                  KEYSERVER_IMPORT_FLAG_LDAP);
+                    rc = keyserver_import_fpr (ctrl,
+                                               fprbuf.u.fpr, fprbuf.fprlen,
+                                               opt.keyserver,
+                                               KEYSERVER_IMPORT_FLAG_LDAP);
                     if (gpg_err_code (rc) == GPG_ERR_NO_DATA
                         || gpg_err_code (rc) == GPG_ERR_NO_KEYSERVER)
                       rc = gpg_error (GPG_ERR_NO_PUBKEY);
@@ -1258,7 +1283,7 @@ get_pubkey_byname (ctrl_t ctrl, enum get_pubkey_modes mode,
                 else
                   {
                     rc = keyserver_import_mbox (ctrl, name,
-                                                &fpr, &fpr_len, keyserver);
+                                                &fpr, &fpr_len, keyserver, 0);
                   }
 		glo_ctrl.in_auto_key_retrieve--;
 	      }
@@ -1831,8 +1856,8 @@ get_pubkey_from_buffer (ctrl_t ctrl, PKT_public_key *pkbuf,
  * returned in *R_KEYBLOCK.  This should be freed using
  * release_kbnode().
  *
- * FPRINT is a byte array whose contents is the fingerprint to use as
- * the search term.  FPRINT_LEN specifies the length of the
+ * FPR is a byte array whose contents is the fingerprint to use as
+ * the search term.  FPRLEN specifies the length of the
  * fingerprint (in bytes).  Currently, only 16, 20, and 32-byte
  * fingerprints are supported.
  *
@@ -1840,15 +1865,15 @@ get_pubkey_from_buffer (ctrl_t ctrl, PKT_public_key *pkbuf,
  * be done by creating a userID conforming to the unified fingerprint
  * style.  */
 int
-get_pubkey_byfprint (ctrl_t ctrl, PKT_public_key *pk, kbnode_t *r_keyblock,
-		     const byte * fprint, size_t fprint_len)
+get_pubkey_byfpr (ctrl_t ctrl, PKT_public_key *pk, kbnode_t *r_keyblock,
+		  const byte *fpr, size_t fprlen)
 {
   int rc;
 
   if (r_keyblock)
     *r_keyblock = NULL;
 
-  if (fprint_len == 32 || fprint_len == 20 || fprint_len == 16)
+  if (fprlen == 32 || fprlen == 20 || fprlen == 16)
     {
       struct getkey_ctx_s ctx;
       KBNODE kb = NULL;
@@ -1865,8 +1890,8 @@ get_pubkey_byfprint (ctrl_t ctrl, PKT_public_key *pk, kbnode_t *r_keyblock,
 
       ctx.nitems = 1;
       ctx.items[0].mode = KEYDB_SEARCH_MODE_FPR;
-      memcpy (ctx.items[0].u.fpr, fprint, fprint_len);
-      ctx.items[0].fprlen = fprint_len;
+      memcpy (ctx.items[0].u.fpr, fpr, fprlen);
+      ctx.items[0].fprlen = fprlen;
       if (pk)
         ctx.req_usage = pk->req_usage;
       rc = lookup (ctrl, &ctx, 0, &kb, &found_key);
@@ -1886,7 +1911,7 @@ get_pubkey_byfprint (ctrl_t ctrl, PKT_public_key *pk, kbnode_t *r_keyblock,
 }
 
 
-/* This function is similar to get_pubkey_byfprint, but it doesn't
+/* This function is similar to get_pubkey_byfpr, but it doesn't
  * merge the self-signed data into the public key and subkeys or into
  * the user ids.  It also doesn't add the key to the user id cache.
  * Further, this function ignores PK->REQ_USAGE.
@@ -1894,17 +1919,16 @@ get_pubkey_byfprint (ctrl_t ctrl, PKT_public_key *pk, kbnode_t *r_keyblock,
  * This function is intended to avoid recursion and, as such, should
  * only be used in very specific situations.
  *
- * Like get_pubkey_byfprint, PK may be NULL.  In that case, this
+ * Like get_pubkey_byfpr, PK may be NULL.  In that case, this
  * function effectively just checks for the existence of the key.  */
 gpg_error_t
-get_pubkey_byfprint_fast (ctrl_t ctrl, PKT_public_key * pk,
-			  const byte * fprint, size_t fprint_len)
+get_pubkey_byfpr_fast (ctrl_t ctrl, PKT_public_key * pk,
+		       const byte *fpr, size_t fprlen)
 {
   gpg_error_t err;
   KBNODE keyblock;
 
-  err = get_keyblock_byfprint_fast (ctrl,
-                                    &keyblock, NULL, fprint, fprint_len, 0);
+  err = get_keyblock_byfpr_fast (ctrl, &keyblock, NULL, fpr, fprlen, 0);
   if (!err)
     {
       if (pk)
@@ -1916,7 +1940,7 @@ get_pubkey_byfprint_fast (ctrl_t ctrl, PKT_public_key * pk,
 }
 
 
-/* This function is similar to get_pubkey_byfprint_fast but returns a
+/* This function is similar to get_pubkey_byfpr_fast but returns a
  * keydb handle at R_HD and the keyblock at R_KEYBLOCK.  R_KEYBLOCK or
  * R_HD may be NULL.  If LOCK is set the handle has been opend in
  * locked mode and keydb_disable_caching () has been called.  On error
@@ -1924,9 +1948,9 @@ get_pubkey_byfprint_fast (ctrl_t ctrl, PKT_public_key * pk,
  * it may have a value of NULL, though.  This allows one to do an insert
  * operation on a locked keydb handle.  */
 gpg_error_t
-get_keyblock_byfprint_fast (ctrl_t ctrl,
-                            kbnode_t *r_keyblock, KEYDB_HANDLE *r_hd,
-                            const byte *fprint, size_t fprint_len, int lock)
+get_keyblock_byfpr_fast (ctrl_t ctrl,
+                         kbnode_t *r_keyblock, KEYDB_HANDLE *r_hd,
+                         const byte *fpr, size_t fprlen, int lock)
 {
   gpg_error_t err;
   KEYDB_HANDLE hd;
@@ -1939,8 +1963,8 @@ get_keyblock_byfprint_fast (ctrl_t ctrl,
   if (r_hd)
     *r_hd = NULL;
 
-  for (i = 0; i < MAX_FINGERPRINT_LEN && i < fprint_len; i++)
-    fprbuf[i] = fprint[i];
+  for (i = 0; i < MAX_FINGERPRINT_LEN && i < fprlen; i++)
+    fprbuf[i] = fpr[i];
 
   hd = keydb_new (ctrl);
   if (!hd)
@@ -1964,7 +1988,7 @@ get_keyblock_byfprint_fast (ctrl_t ctrl,
   if (r_hd)
     *r_hd = hd;
 
-  err = keydb_search_fpr (hd, fprbuf, fprint_len);
+  err = keydb_search_fpr (hd, fprbuf, fprlen);
   if (gpg_err_code (err) == GPG_ERR_NOT_FOUND)
     {
       if (!r_hd)
@@ -2525,7 +2549,7 @@ parse_key_usage (PKT_signature * sig)
 
 /* Apply information from SIGNODE (which is the valid self-signature
  * associated with that UID) to the UIDNODE:
- * - wether the UID has been revoked
+ * - whether the UID has been revoked
  * - assumed creation date of the UID
  * - temporary store the keyflags here
  * - temporary store the key expiration time here
@@ -3090,7 +3114,8 @@ merge_selfsigs_main (ctrl_t ctrl, kbnode_t keyblock, int *r_revoked,
   if (!key_usage)
     {
       /* No key flags at all: get it from the algo.  */
-      key_usage = openpgp_pk_algo_usage (pk->pubkey_algo);
+      key_usage = (openpgp_pk_algo_usage (pk->pubkey_algo)
+                   & PUBKEY_USAGE_BASIC_MASK);
     }
   else
     {
@@ -3364,7 +3389,8 @@ merge_selfsigs_subkey (ctrl_t ctrl, kbnode_t keyblock, kbnode_t subnode)
   if (!key_usage)
     {
       /* No key flags at all: get it from the algo.  */
-      key_usage = openpgp_pk_algo_usage (subpk->pubkey_algo);
+      key_usage = (openpgp_pk_algo_usage (subpk->pubkey_algo)
+                   & PUBKEY_USAGE_BASIC_MASK);
     }
   else
     {
@@ -4081,16 +4107,16 @@ get_seckey_default_or_card (ctrl_t ctrl, PKT_public_key *pk,
     add_to_strlist (&namelist, def_secret_key);
   else if (fpr_card)
     {
-      err = get_pubkey_byfprint (ctrl, pk, NULL, fpr_card, fpr_len);
+      err = get_pubkey_byfpr (ctrl, pk, NULL, fpr_card, fpr_len);
       if (gpg_err_code (err) == GPG_ERR_NO_PUBKEY)
         {
           if (opt.debug)
             log_debug ("using LDAP to find public key for current card\n");
-          err = keyserver_import_fprint (ctrl, fpr_card, fpr_len,
-                                         opt.keyserver,
-                                         KEYSERVER_IMPORT_FLAG_LDAP);
+          err = keyserver_import_fpr (ctrl, fpr_card, fpr_len,
+                                      opt.keyserver,
+                                      KEYSERVER_IMPORT_FLAG_LDAP);
           if (!err)
-            err = get_pubkey_byfprint (ctrl, pk, NULL, fpr_card, fpr_len);
+            err = get_pubkey_byfpr (ctrl, pk, NULL, fpr_card, fpr_len);
           else if (gpg_err_code (err) == GPG_ERR_NO_DATA
                    || gpg_err_code (err) == GPG_ERR_NO_KEYSERVER)
             {
@@ -4273,7 +4299,7 @@ get_user_id_byfpr (ctrl_t ctrl, const byte *fpr, size_t fprlen, size_t *rn)
   if (!name)
     {
       /* Get it so that the cache will be filled.  */
-      if (!get_pubkey_byfprint (ctrl, NULL, NULL, fpr, fprlen))
+      if (!get_pubkey_byfpr (ctrl, NULL, NULL, fpr, fprlen))
         name = cache_get_uid_byfpr (fpr, fprlen, rn);
     }
 
@@ -4561,4 +4587,31 @@ have_secret_key_with_kid (ctrl_t ctrl, u32 *keyid)
 
   keydb_release (kdbhd);
   return result;
+}
+
+
+/* Return an error if KEYBLOCK has a primary or subkey with the given
+ * fingerprint (FPR,FPRLEN).  */
+gpg_error_t
+has_key_with_fingerprint (kbnode_t keyblock, const byte *fpr, size_t fprlen)
+{
+  kbnode_t node;
+  PKT_public_key *pk;
+  byte pkfpr[MAX_FINGERPRINT_LEN];
+  size_t pkfprlen;
+
+  for (node = keyblock; node; node = node->next)
+    {
+      if (node->pkt->pkttype == PKT_PUBLIC_KEY
+          || node->pkt->pkttype == PKT_PUBLIC_SUBKEY
+          || node->pkt->pkttype == PKT_SECRET_KEY
+          || node->pkt->pkttype == PKT_SECRET_SUBKEY)
+        {
+          pk = node->pkt->pkt.public_key;
+          fingerprint_from_pk (pk, pkfpr, &pkfprlen);
+          if (pkfprlen == fprlen && !memcmp (pkfpr, fpr, fprlen))
+            return gpg_error (GPG_ERR_DUP_KEY);
+        }
+    }
+  return 0;
 }

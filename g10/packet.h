@@ -60,6 +60,10 @@
 #define PUBKEY_USAGE_RENC    1024                /* Restricted encryption.  */
 #define PUBKEY_USAGE_TIME    2048                /* Timestamp use.  */
 
+/* The usage bits which can be derived from the algo.  */
+#define PUBKEY_USAGE_BASIC_MASK  (PUBKEY_USAGE_SIG|PUBKEY_USAGE_ENC\
+                                  |PUBKEY_USAGE_CERT|PUBKEY_USAGE_AUTH)
+
 /* Bitflags to convey hints on what kind of signature is created.  */
 #define SIGNHINT_KEYSIG  1
 #define SIGNHINT_SELFSIG 2
@@ -251,7 +255,7 @@ typedef struct
   const byte *trust_regexp;
   struct revocation_key *revkey;
   int numrevkeys;
-  int help_counter;          /* Used internally bu some functions.  */
+  int help_counter;          /* Used internally by some functions.  */
   char *signers_uid;         /* Malloced value of the SIGNERS_UID
                               * subpacket or NULL.  This string has
                               * already been sanitized.  */

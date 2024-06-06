@@ -103,7 +103,7 @@ static void keyboxd_runtime_change (int killflag);
 
 /* STRING_ARRAY is a malloced array with malloced strings.  It is used
  * a space to store strings so that other objects may point to these
- * strings. It shall never be shrinked or any items changes.
+ * strings. It shall never be shrunk or any items changed.
  * STRING_ARRAY itself may be reallocated to increase the size of the
  * table.  STRING_ARRAY_USED is the number of items currently used,
  * STRING_ARRAY_SIZE is the number of calloced slots. */
@@ -298,7 +298,7 @@ static const struct
 
 
 /* Each option we want to support in gpgconf has the needed
- * information in a static list per componenet.  This struct describes
+ * information in a static list per component.  This struct describes
  * the info for a single option.  */
 struct known_option_s
 {
@@ -443,7 +443,7 @@ static const char *known_pseudo_options_gpg[] =
     *                  v-- ARGPARSE_TYPE_INT */
    "compliance_de_vs:0:1:@:",
    /* True is use_keyboxd is enabled.  That option can be set in
-    * common.conf but is not direcly supported by gpgconf.  Thus we
+    * common.conf but is not directly supported by gpgconf.  Thus we
     * only allow to read it out.
     *                  v-- ARGPARSE_TYPE_INT */
    "use_keyboxd:0:1:@:",
@@ -564,7 +564,7 @@ struct gc_option_s
   unsigned int gpgconf_list:1; /* Mentioned by --gpgconf-list.  */
 
   unsigned int has_default:1;  /* The option has a default value.  */
-  unsigned int def_in_desc:1;  /* The default is in the descrition.  */
+  unsigned int def_in_desc:1;  /* The default is in the description.  */
   unsigned int no_arg_desc:1;  /* The argument has a default  ???.  */
   unsigned int no_change:1;    /* User shall not change the option.   */
 
@@ -761,7 +761,7 @@ gpg_agent_runtime_change (int killflag)
   log_assert (i < DIM(argv));
 
   if (!err)
-    err = gnupg_process_spawn (pgmname, argv, 0, NULL, NULL, &proc);
+    err = gnupg_process_spawn (pgmname, argv, 0, NULL, &proc);
   if (!err)
     err = gnupg_process_wait (proc, 1);
   if (err)
@@ -805,7 +805,7 @@ scdaemon_runtime_change (int killflag)
   log_assert (i < DIM(argv));
 
   if (!err)
-    err = gnupg_process_spawn (pgmname, argv, 0, NULL, NULL, &proc);
+    err = gnupg_process_spawn (pgmname, argv, 0, NULL, &proc);
   if (!err)
     err = gnupg_process_wait (proc, 1);
   if (err)
@@ -850,7 +850,7 @@ tpm2daemon_runtime_change (int killflag)
   log_assert (i < DIM(argv));
 
   if (!err)
-    err = gnupg_process_spawn (pgmname, argv, 0, NULL, NULL, &proc);
+    err = gnupg_process_spawn (pgmname, argv, 0, NULL, &proc);
   if (!err)
     err = gnupg_process_wait (proc, 1);
   if (err)
@@ -885,7 +885,7 @@ dirmngr_runtime_change (int killflag)
   log_assert (i < DIM(argv));
 
   if (!err)
-    err = gnupg_process_spawn (pgmname, argv, 0, NULL, NULL, &proc);
+    err = gnupg_process_spawn (pgmname, argv, 0, NULL, &proc);
   if (!err)
     err = gnupg_process_wait (proc, 1);
   if (err)
@@ -919,7 +919,7 @@ keyboxd_runtime_change (int killflag)
   log_assert (i < DIM(argv));
 
   if (!err)
-    err = gnupg_process_spawn (pgmname, argv, 0, NULL, NULL, &proc);
+    err = gnupg_process_spawn (pgmname, argv, 0, NULL, &proc);
   if (!err)
     err = gnupg_process_wait (proc, 1);
   if (err)
@@ -985,7 +985,7 @@ gc_component_launch (int component)
   argv[i] = NULL;
   log_assert (i < DIM(argv));
 
-  err = gnupg_process_spawn (pgmname, argv, 0, NULL, NULL, &proc);
+  err = gnupg_process_spawn (pgmname, argv, 0, NULL, &proc);
   if (!err)
     err = gnupg_process_wait (proc, 1);
   if (err)
@@ -1369,9 +1369,8 @@ gc_component_check_options (int component, estream_t out, const char *conf_file)
 
   result = 0;
   errlines = NULL;
-  err = gnupg_process_spawn (pgmname, argv,
-                             GNUPG_PROCESS_STDERR_PIPE,
-                             NULL, NULL, &proc);
+  err = gnupg_process_spawn (pgmname, argv, GNUPG_PROCESS_STDERR_PIPE,
+                             NULL, &proc);
   if (err)
     result |= 1; /* Program could not be run.  */
   else
@@ -1763,9 +1762,8 @@ retrieve_options_from_program (gc_component_id_t component, int only_installed)
   /* First we need to read the option table from the program.  */
   argv[0] = "--dump-option-table";
   argv[1] = NULL;
-  err = gnupg_process_spawn (pgmname, argv,
-                             GNUPG_PROCESS_STDOUT_PIPE,
-                             NULL, NULL, &proc);
+  err = gnupg_process_spawn (pgmname, argv, GNUPG_PROCESS_STDOUT_PIPE,
+                             NULL, &proc);
   if (err)
     {
       gc_error (1, 0, "could not gather option table from '%s': %s",
@@ -1869,7 +1867,7 @@ retrieve_options_from_program (gc_component_id_t component, int only_installed)
        * gpgrt_parser.  Unfortunately there is no private pointer in
        * the public option table struct so that we can't add extra
        * data we need here.  Thus we need to build up another table
-       * for such info and for ease of use we also copy the tehre the
+       * for such info and for ease of use we also copy there the
        * data from the option table.  It is not possible to use the
        * known_option_s for this because that one does not carry
        * header lines and it might also be problematic to use such
@@ -1884,7 +1882,7 @@ retrieve_options_from_program (gc_component_id_t component, int only_installed)
         }
 
       /* Note that as per argparser specs the opt_table uses "@" to
-       * specifify an empty description.  In the DESC script of
+       * specify an empty description.  In the DESC script of
        * options (opt_info_t) we want to have a real empty string.  */
       opt_info[opt_info_used].name = optname;
       if (*optdesc == '@' && !optdesc[1])
@@ -1952,9 +1950,8 @@ retrieve_options_from_program (gc_component_id_t component, int only_installed)
   /* Now read the default options.  */
   argv[0] = "--gpgconf-list";
   argv[1] = NULL;
-  err = gnupg_process_spawn (pgmname, argv,
-                             GNUPG_PROCESS_STDOUT_PIPE,
-                             NULL, NULL, &proc);
+  err = gnupg_process_spawn (pgmname, argv, GNUPG_PROCESS_STDOUT_PIPE,
+                             NULL, &proc);
   if (err)
     {
       gc_error (1, 0, "could not gather active options from '%s': %s",

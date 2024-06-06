@@ -779,7 +779,9 @@ the fingerprint @var{fpr}.  @var{adskfpr} is the fingerprint of
 another key's encryption subkey.  A subkey is commonly used here
 because by default a primary key has no encryption capability.  Use
 the option @option{--with-subkey-fingerprint} with a list command to
-display the subkey fingerprints.
+display the subkey fingerprints.  If the string "default" is used for
+@var{adskfpr} all missing ADSKs configured with
+@option{--default-new-key-adsk} are added.
 
 @item --generate-key
 @opindex generate-key
@@ -1611,7 +1613,7 @@ maintained by the keyboxd process in its own database.
 
 @item --primary-keyring @var{file}
 @opindex primary-keyring
-This is a varian of @option{--keyring} and designates @var{file} as
+This is a variant of @option{--keyring} and designates @var{file} as
 the primary public keyring. This means that newly imported keys (via
 @option{--import} or keyserver @option{--recv-from}) will go to this
 keyring.
@@ -1808,13 +1810,26 @@ this option at all (e.g. due to the @option{--no-options} option).
 @opindex add-desig-revoker
 Add the key specified by @var{fingerprint} as a designated revoker to
 newly created keys.  If the fingerprint is prefixed with the keyword
-``sensitive:'' that info is normally not exported wit the key.  This
-option may be given several time to add more than one designated
+``sensitive:'' that info is normally not exported with the key.  This
+option may be given several times to add more than one designated
 revoker.  If the keyword ``clear'' is used instead of a fingerprint,
-all designated options previously encountered are discarded.
-Designated revokers are marked on the key as non-revocable.  Note that
-a designated revoker specified using a parameter file will also be
-added to the key.
+all previously fiven fingerprints are discarded.  Designated revokers
+are marked on the key as non-revocable.  Note that a designated
+revoker specified using a parameter file will also be added to the
+key.
+
+@item --default-new-key-adsk @var{fingerprint}
+@opindex default-new-key-adsk
+Add the subkey specified by @var{fingerprint} as an Additional
+Decryption Subkey (ADSK) to newly created keys.  This option may be
+given several time to add more than one ADSK.  It is also possible to
+give several fingerprints delimited by space or comma as value to this
+option.  If the keyword ``clear'' is used instead of a fingerprint,
+all previously specified fingerprints are discarded (useful to
+override options given in a config file).  The fingerprint is expected
+to specify a subkey and it does not need an exclamation mark as
+suffix; it must be given in cmpact format (40 or 64 hex-digits without
+any spaces).
 
 
 @item --trust-model @{pgp|classic|tofu|tofu+pgp|direct|always|auto@}
@@ -1993,15 +2008,15 @@ list.  The default is "local,wkd".
   Locate a key using the Web Key Directory protocol.
 
   @item ldap
-  Using DNS Service Discovery, check the domain in question for any LDAP
-  keyservers to use.  If this fails, attempt to locate the key using the
-  PGP Universal method of checking @samp{ldap://keys.(thedomain)}.
+  Locate the key using the configured LDAP servers.  This method is
+  similar to the @code{keyserver} mechanism but always uses only LDAP
+  servers.
 
   @item ntds
   Locate the key using the Active Directory (Windows only).  This
   method also allows one to search by fingerprint using the command
   @option{--locate-external-key}.  Note that this mechanism is
-  actually a shortcut for the mechanism @samp{keyserver} but using
+  actually a shortcut for the mechanism @samp{ldap} using only
   "ldap:///" as the keyserver.
 
   @item keyserver
@@ -2794,7 +2809,7 @@ The available properties are:
   Key Directory.
 
   @item url
-  A string with the the URL associated wit the last key lookup.
+  A string with the the URL associated with the last key lookup.
 
 @end table
 

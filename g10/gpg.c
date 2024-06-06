@@ -435,6 +435,7 @@ enum cmd_and_opt_values
     oTOFUDefaultPolicy,
     oTOFUDBFormat,
     oDefaultNewKeyAlgo,
+    oDefaultNewKeyADSK,
     oWeakDigest,
     oUnwrap,
     oOnlySignTextIDs,
@@ -650,6 +651,7 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_s_n (oPGP7, "pgp7", "@"),
   ARGPARSE_s_n (oPGP8, "pgp8", "@"),
   ARGPARSE_s_s (oDefaultNewKeyAlgo, "default-new-key-algo", "@"),
+  ARGPARSE_s_s (oDefaultNewKeyADSK, "default-new-key-adsk", "@"),
   ARGPARSE_p_u (oMinRSALength, "min-rsa-length", "@"),
 #ifndef NO_TRUST_MODELS
   ARGPARSE_s_n (oAlwaysTrust, "always-trust", "@"),
@@ -2003,7 +2005,7 @@ gpgconf_list (void)
    * compliance mode.  This does not test all parameters but the basic
    * conditions like a proper RNG and Libgcrypt.  AS of now we always
    * return 0 because this version of gnupg has not yet received an
-   * appoval. */
+   * approval. */
   es_printf ("compliance_de_vs:%lu:%d:\n", GC_OPT_FLAG_DEFAULT,
              0 /*gnupg_rng_is_compliant (CO_DE_VS)*/);
 
@@ -2372,6 +2374,7 @@ main (int argc, char **argv)
     const char *fname;
     char *username;
     int may_coredump;
+    gpg_error_t tmperr;
     strlist_t sl;
     strlist_t remusr = NULL;
     strlist_t locusr = NULL;
@@ -2609,7 +2612,7 @@ main (int argc, char **argv)
     pargs.argc = &argc;
     pargs.argv = &argv;
     /* We are re-using the struct, thus the reset flag.  We OR the
-     * flags so that the internal intialized flag won't be cleared. */
+     * flags so that the internal initialized flag won't be cleared. */
     pargs.flags |= (ARGPARSE_FLAG_RESET
                     | ARGPARSE_FLAG_KEEP
                     | ARGPARSE_FLAG_SYS
@@ -2619,7 +2622,7 @@ main (int argc, char **argv)
     /* By this point we have a homedir, and cannot change it. */
     check_permissions (gnupg_homedir (), 0);
 
-    /* The configuraton directories for use by gpgrt_argparser.  */
+    /* The configuration directories for use by gpgrt_argparser.  */
     gpgrt_set_confdir (GPGRT_CONFDIR_SYS, gnupg_sysconfdir ());
     gpgrt_set_confdir (GPGRT_CONFDIR_USER, gnupg_homedir ());
 
@@ -3778,6 +3781,16 @@ main (int argc, char **argv)
             opt.def_new_key_algo = pargs.r.ret_str;
             break;
 
+          case oDefaultNewKeyADSK:
+            if (!strcmp (pargs.r.ret_str, "clear"))
+              FREE_STRLIST (opt.def_new_key_adsks);
+            else if (!tokenize_to_strlist (&opt.def_new_key_adsks,
+                                           pargs.r.ret_str, " \t,")
+                && (tmperr = gpg_err_code_from_syserror()) != GPG_ERR_ENOENT)
+              log_info (_("error parsing value for option '%s': %s\n"),
+                        "--default-new-key-algo", gpg_strerror (tmperr));
+            break;
+
           case oUseOnlyOpenPGPCard:
             opt.flags.use_only_openpgp_card = 1;
             break;
@@ -4291,8 +4304,7 @@ main (int argc, char **argv)
         && (ALWAYS_ADD_KEYRINGS
             || (cmd != aDeArmor && cmd != aEnArmor && cmd != aGPGConfTest)))
       {
-        gpg_error_t tmperr = 0;
-
+        tmperr = 0;
 	if (!nrings || default_keyring > 0)  /* Add default ring. */
           tmperr = keydb_add_resource ("pubring" EXTSEP_S GPGEXT_GPG,
                                        KEYDB_RESOURCE_FLAG_DEFAULT);
@@ -4761,8 +4773,6 @@ main (int argc, char **argv)
             parse_auto_key_locate (DEFAULT_AKL_LIST);
           }
 	public_key_list (ctrl, sl, 1, cmd == aLocateExtKeys);
-
-
 	free_strlist (sl);
 	break;
 
