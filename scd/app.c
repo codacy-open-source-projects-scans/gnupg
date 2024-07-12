@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <npth.h>
 
 #include "scdaemon.h"
@@ -2498,7 +2499,7 @@ report_change (int slot, int old_status, int cur_status)
       gpg_error_t err;
       const char *args[9];
       char numbuf1[30], numbuf2[30], numbuf3[30];
-      gnupg_spawn_actions_t act = NULL;
+      gpgrt_spawn_actions_t act = NULL;
 
       sprintf (numbuf1, "%d", slot);
       sprintf (numbuf2, "0x%04X", old_status);
@@ -2516,15 +2517,15 @@ report_change (int slot, int old_status, int cur_status)
       args[8] = NULL;
 
       fname = make_filename (gnupg_homedir (), "scd-event", NULL);
-      err = gnupg_spawn_actions_new (&act);
+      err = gpgrt_spawn_actions_new (&act);
       if (!err)
         {
 #ifndef HAVE_W32_SYSTEM
-          gnupg_spawn_actions_set_atfork (act, setup_env, envstr);
+          gpgrt_spawn_actions_set_atfork (act, setup_env, envstr);
 #endif
-          err = gnupg_process_spawn (fname, args, GNUPG_PROCESS_DETACHED,
+          err = gpgrt_process_spawn (fname, args, GPGRT_PROCESS_DETACHED,
                                      act, NULL);
-          gnupg_spawn_actions_release (act);
+          gpgrt_spawn_actions_release (act);
         }
       if (err && gpg_err_code (err) != GPG_ERR_ENOENT)
         log_error ("failed to run event handler '%s': %s\n",
@@ -2648,7 +2649,7 @@ initialize_module_command (void)
 #ifdef HAVE_W32_SYSTEM
   scd_init_event (&card_list_lock.the_event, card_list_lock.events);
 #else
-  ret = gnupg_create_pipe (card_list_lock.notify_pipe);
+  ret = gnupg_create_pipe (card_list_lock.notify_pipe, 0);
   if (ret)
     {
       err = gpg_error_from_syserror ();
