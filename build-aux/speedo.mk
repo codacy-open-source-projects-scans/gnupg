@@ -180,8 +180,10 @@ STATIC=0
 # external packages.
 TARBALLS=$(shell pwd)/../tarballs
 
-#  Number of parallel make jobs for each package
-MAKE_J=6
+# Check if nproc is available, set MAKE_J accordingly
+MAKE_J = $(shell if command -v nproc >/dev/null 2>&1; then \
+           nproc; else echo 6; \
+         fi)
 
 # Name to use for the w32 installer and sources
 
@@ -196,6 +198,9 @@ WIXPREFIX=$(shell readlink -f ~/w32root/wixtools)
 
 # If patchelf(1) is not available disable the command.
 PATCHELF := $(shell patchelf --version 2>/dev/null >/dev/null || echo "echo please run: ")patchelf
+
+# Set this to 1 to get verbose output
+VERBOSE=0
 
 # Read signing information from ~/.gnupg-autogen.rc
 define READ_AUTOGEN_template
@@ -398,8 +403,11 @@ gettext_ver = 0.18.2.1
 
 
 # The GIT repository.  Using a local repo is much faster.
-#gitrep = git://git.gnupg.org
-gitrep = ${HOME}/s
+ifeq ($(shell [ -d ${HOME}/s ] && echo yes),yes)
+  gitrep = ${HOME}/s
+else
+  gitrep = git://git.gnupg.org
+endif
 
 # The tarball directories
 pkgrep = https://gnupg.org/ftp/gcrypt
@@ -676,13 +684,24 @@ speedo_w64_build_list = $(speedo_w64_spkgs)
 # assignments), we check that the targetos has been given
 ifneq ($(TARGETOS),)
 
+# Check for VERBOSE variable to conditionally set the silent option
+ifeq ($(VERBOSE),1)
+  slient_flag =
+  autogen_sh_silent_flag =
+else
+  slient_flag = --silent
+  autogen_sh_silent_flag = AUTOGEN_SH_SILENT=1
+endif
+
 # Determine build and host system
-build := $(shell $(topsrc)/autogen.sh --silent --print-build)
+build := $(shell $(topsrc)/autogen.sh $(silent_flag) --print-build)
 ifeq ($(TARGETOS),w32)
   speedo_autogen_buildopt := --build-$(W32VERSION)
   speedo_autogen_buildopt6 := --build-w64
-  host := $(shell $(topsrc)/autogen.sh --silent --print-host --build-$(W32VERSION))
-  host6:= $(shell $(topsrc)/autogen.sh --silent --print-host --build-w64)
+  host := $(shell $(topsrc)/autogen.sh $(silent_flag) --print-host \
+            --build-$(W32VERSION))
+  host6:= $(shell $(topsrc)/autogen.sh $(silent_flag) --print-host \
+            --build-w64)
   speedo_host_build_option := --host=$(host) --build=$(build)
   speedo_host_build_option6 := --host=$(host6) --build=$(build)
   speedo_w32_cflags := -mms-bitfields
@@ -746,6 +765,9 @@ define SETVARS
         fi;                                                             \
         pkgbdir="$(bdir)/$(1)";                                         \
         pkgcfg="$(call GETVAR,speedo_pkg_$(1)_configure)";              \
+        if [ "$(TARGETOS)" != native ]; then                            \
+          pkgcfg="$(pkgcfg) --libdir=$(idir)/lib";                      \
+        fi;                                                             \
         tmp="$(speedo_w32_cflags)                                       \
              $(call GETVAR,speedo_pkg_$(1)_extracflags)";               \
         if [ x$$$$(echo "$$$$tmp" | tr -d '[:space:]')x != xx ]; then   \
@@ -905,13 +927,14 @@ else ifneq ($(findstring $(1),$(speedo_gnupg_style)),)
 	 mkdir "$$$${pkgbdir}";				\
 	 cd "$$$${pkgbdir}";		        	\
          if [ -n "$(speedo_autogen_buildopt)" ]; then   \
-            eval AUTOGEN_SH_SILENT=1 $(W32VERSION)root="$(idir)"  \
+            eval $(autogen_sh_silent_flag)              \
+               $(W32VERSION)root="$(idir)"              \
                "$$$${pkgsdir}/autogen.sh"               \
                $(speedo_autogen_buildopt)            	\
                $$$${pkgcfg} $$$${pkgextracflags}; 	\
          else                                        	\
             eval "$$$${pkgsdir}/configure" 		\
-	       --silent                 		\
+	       $(silent_flag)                 		\
 	       --enable-maintainer-mode			\
                --prefix="$(idir)"		        \
                $$$${pkgcfg} $$$${pkgextracflags};     	\
@@ -921,7 +944,7 @@ else
 	 mkdir "$$$${pkgbdir}";				\
 	 cd "$$$${pkgbdir}";		        	\
 	 eval "$$$${pkgsdir}/configure" 		\
-	     --silent $(speedo_host_build_option)	\
+	     $(silent_flag) $(speedo_host_build_option)	\
              --prefix="$(idir)"		        	\
 	     $$$${pkgcfg}  $$$${pkgextracflags};	\
 	 )
@@ -940,13 +963,13 @@ else ifneq ($(findstring $(1),$(speedo_gnupg_style)),)
 	 mkdir "$$$${pkgbdir}";				\
 	 cd "$$$${pkgbdir}";		        	\
          if [ -n "$(speedo_autogen_buildopt)" ]; then   \
-            eval AUTOGEN_SH_SILENT=1 w64root="$(idir6)" \
+            eval $(autogen_sh_silent_flag) w64root="$(idir6)" \
                "$$$${pkgsdir}/autogen.sh"               \
                $(speedo_autogen_buildopt6)            	\
                $$$${pkgcfg} $$$${pkgextracflags};       \
          else                                        	\
             eval "$$$${pkgsdir}/configure" 		\
-	       --silent                 		\
+	       $(silent_flag)                 		\
 	       --enable-maintainer-mode			\
                --prefix="$(idir6)"		        \
                $$$${pkgcfg} $$$${pkgextracflags};       \
@@ -956,7 +979,7 @@ else
 	 mkdir "$$$${pkgbdir}";				\
 	 cd "$$$${pkgbdir}";		        	\
 	 eval "$$$${pkgsdir}/configure" 		\
-	     --silent $(speedo_host_build_option6)	\
+	     $(silent_flag) $(speedo_host_build_option6)	\
              --prefix="$(idir6)"	        	\
 	     $$$${pkgcfg} $$$${pkgextracflags};       	\
 	 )
