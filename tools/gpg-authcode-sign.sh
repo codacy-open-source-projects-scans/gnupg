@@ -183,6 +183,17 @@ if [ ! -f $autogenrc ]; then
     exit 1
 fi
 
+# Define the cleanup routine for osslsigncode
+cleanup()
+{
+    if [ -n "$outname" && -f "${outname}.tmp" ]; then
+        echo >&2 "Cleaning up: Removing ${outname}.tmp"
+        rm -f "${outname}.tmp"
+    fi
+}
+
+# Trap common signals and exit to run the cleanup
+trap cleanup 0 SIGINT SIGTERM
 
 for v in AUTHENTICODE_SIGNHOST AUTHENTICODE_TOOL AUTHENTICODE_TSURL \
          AUTHENTICODE_KEY AUTHENTICODE_CERTS VERSION_SIGNKEY \
@@ -251,11 +262,22 @@ elif [ "$AUTHENTICODE_KEY" = none ]; then
     echo >&2 "$PGM: Signing disabled; would sign: '$inname'"
     [ "$inname" != "$outname" ] && cp "$inname" "$outname"
 
-else
+elif [ -n $(echo "$AUTHENTICODE_KEY" | egrep "\.(pfx|p12)$") ]; then
 
-    echo >&2 "$PGM: Signing using key $AUTHENTICODE_KEY"
+    echo >&2 "$PGM: Signing using PKCS#12 container $AUTHENTICODE_KEY"
     osslsigncode sign -certs "$AUTHENTICODE_CERTS" \
        -pkcs12 "$AUTHENTICODE_KEY" -askpass \
+       -ts "$AUTHENTICODE_TSURL" \
+       -h sha256 -n "$desc" -i "$url" \
+       -in "$inname" -out "$outname.tmp"
+       cp "$outname.tmp" "$outname"
+       rm "$outname.tmp"
+
+else
+
+    echo >&2 "$PGM: Signing using unprotected key $AUTHENTICODE_KEY"
+    osslsigncode sign -certs "$AUTHENTICODE_CERTS" \
+       -key "$AUTHENTICODE_KEY" \
        -ts "$AUTHENTICODE_TSURL" \
        -h sha256 -n "$desc" -i "$url" \
        -in "$inname" -out "$outname.tmp"
