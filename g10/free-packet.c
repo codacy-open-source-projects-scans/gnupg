@@ -30,24 +30,10 @@
 #include "options.h"
 
 
-/* Run time check to see whether mpi_copy does not copy the flags
- * properly.   This was fixed in version 1.8.6.  */
-static int
-is_mpi_copy_broken (void)
-{
-  static char result;
-
-  if (!result)
-    {
-      result = !gcry_check_version ("1.8.6");
-      result |= 0x80;
-    }
-  return (result & 1);
-}
-
-
-/* This is mpi_copy with a fix for opaque MPIs which store a NULL
-   pointer.  This will also be fixed in Libggcrypt 1.7.0.  */
+/* This is a wrapper for mpi_copy which handles opaque MPIs with a
+ * NULL pointer as opaque data; e.g. gcry_mpi_set_opaque(a, NULL, 0).
+ * It seems that at least gcry_mpi_set_opaque_copy does not yet handle
+ * this correctly.  */
 static gcry_mpi_t
 my_mpi_copy (gcry_mpi_t a)
 {
@@ -55,17 +41,6 @@ my_mpi_copy (gcry_mpi_t a)
       && gcry_mpi_get_flag (a, GCRYMPI_FLAG_OPAQUE)
       && !gcry_mpi_get_opaque (a, NULL))
     return NULL;
-
-  if (is_mpi_copy_broken ())
-    {
-      int flag_user2 = a? gcry_mpi_get_flag (a, GCRYMPI_FLAG_USER2) : 0;
-      gcry_mpi_t b;
-
-      b = gcry_mpi_copy (a);
-      if (b && flag_user2)
-        gcry_mpi_set_flag (b, GCRYMPI_FLAG_USER2);
-      return b;
-    }
 
   return gcry_mpi_copy (a);
 }
@@ -77,17 +52,49 @@ free_symkey_enc( PKT_symkey_enc *enc )
     xfree(enc);
 }
 
+/* This is the core of free_pubkey_enc but does only release the
+ * allocated members of ENC.  */
 void
-free_pubkey_enc( PKT_pubkey_enc *enc )
+release_pubkey_enc_parts (PKT_pubkey_enc *enc)
 {
-    int n, i;
-    n = pubkey_get_nenc( enc->pubkey_algo );
-    if( !n )
-	mpi_release(enc->data[0]);
-    for(i=0; i < n; i++ )
-	mpi_release( enc->data[i] );
-    xfree(enc);
+  int n, i;
+  n = pubkey_get_nenc( enc->pubkey_algo );
+  if (!n)
+    mpi_release (enc->data[0]);
+  for (i=0; i < n; i++ )
+    mpi_release (enc->data[i]);
 }
+
+void
+free_pubkey_enc (PKT_pubkey_enc *enc)
+{
+  release_pubkey_enc_parts (enc);
+  xfree (enc);
+}
+
+
+/* Copy everything from SRC to DST.  This assumes that DST has been
+ * malloced or statically allocated. */
+void
+copy_pubkey_enc_parts (PKT_pubkey_enc *dst, PKT_pubkey_enc *src)
+{
+  int n, i;
+
+  dst->keyid[0] = src->keyid[0];
+  dst->keyid[1] = src->keyid[1];
+  dst->version  = src->version;
+  dst->pubkey_algo = src->pubkey_algo;
+  dst->seskey_algo = src->seskey_algo;
+  dst->throw_keyid = src->throw_keyid;
+
+  if (!(n = pubkey_get_nenc (dst->pubkey_algo)))
+    n = 1;  /* All data is in the first item as an opaque MPI. */
+  for (i=0; i < n; i++)
+    dst->data[i] = my_mpi_copy (src->data[i]);
+  for (; i < PUBKEY_MAX_NENC; i++)
+    dst->data[i] = NULL;
+}
+
 
 void
 free_seckey_enc( PKT_signature *sig )

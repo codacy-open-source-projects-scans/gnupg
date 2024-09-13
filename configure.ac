@@ -29,7 +29,7 @@ min_automake_version="1.16.3"
 m4_define([mym4_package],[gnupg])
 m4_define([mym4_major], [2])
 m4_define([mym4_minor], [5])
-m4_define([mym4_micro], [1])
+m4_define([mym4_micro], [2])
 
 # To start a new development series, i.e a new major or minor number
 # you need to mark an arbitrary commit before the first beta release
@@ -232,18 +232,6 @@ show_gnupg_dirmngr_ldap_pgm="(default)"
 test -n "$GNUPG_DIRMNGR_LDAP_PGM" \
       && show_gnupg_dirmngr_ldap_pgm="$GNUPG_DIRMNGR_LDAP_PGM"
 
-
-#
-# For a long time gpg 2.x was installed as gpg2.  This changed with
-# 2.2.  This option can be used to install gpg under the name gpg2.
-#
-AC_ARG_ENABLE(gpg-is-gpg2,
-    AS_HELP_STRING([--enable-gpg-is-gpg2],[Set installed name of gpg to gpg2]),
-    gpg_is_gpg2=$enableval)
-if test "$gpg_is_gpg2" = "yes"; then
-   AC_DEFINE(USE_GPG2_HACK, 1, [Define to install gpg as gpg2])
-fi
-AM_CONDITIONAL(USE_GPG2_HACK, test "$gpg_is_gpg2" = "yes")
 
 
 # SELinux support includes tracking of sensitive files to avoid

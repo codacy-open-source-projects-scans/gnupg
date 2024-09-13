@@ -159,11 +159,8 @@ typedef struct {
 struct pubkey_enc_list
 {
   struct pubkey_enc_list *next;
-  u32 keyid[2];
-  int pubkey_algo;
-  int seskey_algo;
   int result;
-  gcry_mpi_t data[PUBKEY_MAX_NENC];
+  PKT_pubkey_enc d;
 };
 
 
@@ -647,7 +644,10 @@ int proc_signature_packets (ctrl_t ctrl, void *ctx, iobuf_t a,
 			    strlist_t signedfiles, const char *sigfile );
 int proc_signature_packets_by_fd (ctrl_t ctrl, void *anchor, IOBUF a,
                                   gnupg_fd_t signed_data_fd);
-int proc_encryption_packets (ctrl_t ctrl, void *ctx, iobuf_t a);
+gpg_error_t proc_encryption_packets (ctrl_t ctrl, void *ctx, iobuf_t a,
+                                     DEK **r_dek,
+                                     struct pubkey_enc_list **r_list);
+
 int list_packets( iobuf_t a );
 
 const byte *issuer_fpr_raw (PKT_signature *sig, size_t *r_len);
@@ -676,7 +676,9 @@ struct parse_packet_ctx_s
   struct packet_struct last_pkt; /* The last parsed packet.  */
   int free_last_pkt; /* Indicates that LAST_PKT must be freed.  */
   int skip_meta;     /* Skip ring trust packets.  */
+  int only_fookey_enc;  /* Stop if the packet is not {sym,pub}key_enc. */
   unsigned int n_parsed_packets;	/* Number of parsed packets.  */
+  int last_ctb;      /* The last CTB read.  */
 };
 typedef struct parse_packet_ctx_s *parse_packet_ctx_t;
 
@@ -686,7 +688,9 @@ typedef struct parse_packet_ctx_s *parse_packet_ctx_t;
     (a)->last_pkt.pkt.generic= NULL;\
     (a)->free_last_pkt = 0;         \
     (a)->skip_meta = 0;             \
+    (a)->only_fookey_enc = 0;       \
     (a)->n_parsed_packets = 0;      \
+    (a)->last_ctb = 1;              \
   } while (0)
 
 #define deinit_parse_packet(a) do { \
@@ -895,19 +899,28 @@ void free_notation (struct notation *notation);
 
 /*-- free-packet.c --*/
 void free_symkey_enc( PKT_symkey_enc *enc );
+
+void release_pubkey_enc_parts (PKT_pubkey_enc *enc);
 void free_pubkey_enc( PKT_pubkey_enc *enc );
+void copy_pubkey_enc_parts (PKT_pubkey_enc *dst, PKT_pubkey_enc *src);
+
 void free_seckey_enc( PKT_signature *enc );
+
 void release_public_key_parts( PKT_public_key *pk );
 void free_public_key( PKT_public_key *key );
+
 void free_attributes(PKT_user_id *uid);
 void free_user_id( PKT_user_id *uid );
 void free_comment( PKT_comment *rem );
 void free_packet (PACKET *pkt, parse_packet_ctx_t parsectx);
 prefitem_t *copy_prefs (const prefitem_t *prefs);
+
 PKT_public_key *copy_public_key_basics (PKT_public_key *d, PKT_public_key *s);
 PKT_public_key *copy_public_key( PKT_public_key *d, PKT_public_key *s );
+
 PKT_signature *copy_signature( PKT_signature *d, PKT_signature *s );
 PKT_user_id *scopy_user_id (PKT_user_id *sd );
+
 int cmp_public_keys( PKT_public_key *a, PKT_public_key *b );
 int cmp_signatures( PKT_signature *a, PKT_signature *b );
 int cmp_user_ids( PKT_user_id *a, PKT_user_id *b );

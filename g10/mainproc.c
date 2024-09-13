@@ -1,7 +1,7 @@
 /* mainproc.c - handle packets
  * Copyright (C) 1998-2009 Free Software Foundation, Inc.
  * Copyright (C) 2013-2014 Werner Koch
- * Copyright (C) 2020 g10 Code GmbH
+ * Copyright (C) 2020, 2024 g10 Code GmbH
  *
  * This file is part of GnuPG.
  *
@@ -116,7 +116,7 @@ static int literals_seen;
 
 
 /*** Local prototypes.  ***/
-static int do_proc_packets (CTX c, iobuf_t a);
+static int do_proc_packets (CTX c, iobuf_t a, int keep_dek_and_list);
 static void list_node (CTX c, kbnode_t node);
 static void proc_tree (CTX c, kbnode_t node);
 
@@ -141,10 +141,7 @@ release_list( CTX c )
     {
       struct pubkey_enc_list *tmp = c->pkenc_list->next;
 
-      mpi_release (c->pkenc_list->data[0]);
-      mpi_release (c->pkenc_list->data[1]);
-      mpi_release (c->pkenc_list->data[2]);
-      mpi_release (c->pkenc_list->data[3]);
+      release_pubkey_enc_parts (&c->pkenc_list->d);
       xfree (c->pkenc_list);
       c->pkenc_list = tmp;
     }
@@ -523,21 +520,10 @@ proc_pubkey_enc (CTX c, PACKET *pkt)
 
   if (!opt.list_only && !opt.override_session_key)
     {
-      struct pubkey_enc_list *x = xmalloc (sizeof *x);
+      struct pubkey_enc_list *x = xcalloc (1, sizeof *x);
 
-      x->keyid[0] = enc->keyid[0];
-      x->keyid[1] = enc->keyid[1];
-      x->pubkey_algo = enc->pubkey_algo;
+      copy_pubkey_enc_parts (&x->d, enc);
       x->result = -1;
-      x->seskey_algo = enc->seskey_algo;
-      x->data[0] = x->data[1] = x->data[2] = x->data[3] = NULL;
-      if (enc->data[0])
-        {
-          x->data[0] = mpi_copy (enc->data[0]);
-          x->data[1] = mpi_copy (enc->data[1]);
-          x->data[2] = mpi_copy (enc->data[2]);
-          x->data[3] = mpi_copy (enc->data[3]);
-        }
       x->next = c->pkenc_list;
       c->pkenc_list = x;
     }
@@ -561,22 +547,22 @@ print_pkenc_list (ctrl_t ctrl, struct pubkey_enc_list *list)
 
       pk = xmalloc_clear (sizeof *pk);
 
-      pk->pubkey_algo = list->pubkey_algo;
-      if (!get_pubkey (ctrl, pk, list->keyid))
+      pk->pubkey_algo = list->d.pubkey_algo;
+      if (!get_pubkey (ctrl, pk, list->d.keyid))
         {
           pubkey_string (pk, pkstrbuf, sizeof pkstrbuf);
 
           log_info (_("encrypted with %s key, ID %s, created %s\n"),
                     pkstrbuf, keystr_from_pk (pk),
                     strtimestamp (pk->timestamp));
-          p = get_user_id_native (ctrl, list->keyid);
+          p = get_user_id_native (ctrl, list->d.keyid);
           log_printf (_("      \"%s\"\n"), p);
           xfree (p);
         }
       else
         log_info (_("encrypted with %s key, ID %s\n"),
-                  openpgp_pk_algo_name (list->pubkey_algo),
-                  keystr(list->keyid));
+                  openpgp_pk_algo_name (list->d.pubkey_algo),
+                  keystr (list->d.keyid));
 
       if (opt.flags.require_pqc_encryption
           && pk->pubkey_algo != PUBKEY_ALGO_KYBER)
@@ -594,10 +580,15 @@ proc_encrypted (CTX c, PACKET *pkt)
   int early_plaintext = literals_seen;
   unsigned int compliance_de_vs = 0;
 
-  if (pkt->pkttype == PKT_ENCRYPTED_AEAD)
-    c->seen_pkt_encrypted_aead = 1;
-  if (pkt->pkttype == PKT_ENCRYPTED_MDC)
-    c->seen_pkt_encrypted_mdc = 1;
+  if (pkt)
+    {
+      if (pkt->pkttype == PKT_ENCRYPTED_AEAD)
+        c->seen_pkt_encrypted_aead = 1;
+      if (pkt->pkttype == PKT_ENCRYPTED_MDC)
+        c->seen_pkt_encrypted_mdc = 1;
+    }
+  else /* No PKT indicates the the add-recipients mode.  */
+    log_assert (c->ctrl->modify_recipients);
 
   if (early_plaintext)
     {
@@ -644,7 +635,7 @@ proc_encrypted (CTX c, PACKET *pkt)
               { /* Key was not tried or it caused an error.  */
                 char buf[20];
                 snprintf (buf, sizeof buf, "%08lX%08lX",
-                          (ulong)list->keyid[0], (ulong)list->keyid[1]);
+                          (ulong)list->d.keyid[0], (ulong)list->d.keyid[1]);
                 write_status_text (STATUS_NO_SECKEY, buf);
               }
         }
@@ -663,6 +654,22 @@ proc_encrypted (CTX c, PACKET *pkt)
 
   if (c->dek && opt.verbose > 1)
     log_info (_("public key encrypted data: good DEK\n"));
+
+  if (c->ctrl->modify_recipients)
+    {
+      if (c->anchor)
+        {
+          log_error ("command not possible with nested data\n");
+          write_status_errcode ("decryption.mod_recp", GPG_ERR_BAD_DATA);
+          xfree (c->dek);
+          c->dek = NULL;
+          return;
+        }
+      literals_seen++;
+      /* Simply return here.  Our caller will then test for DEK and
+       * the PK_list to decide whether decryption worked.  */
+      return;
+    }
 
   if (!opt.show_only_session_key)
     write_status (STATUS_BEGIN_DECRYPTION);
@@ -768,8 +775,8 @@ proc_encrypted (CTX c, PACKET *pkt)
       for (i = c->pkenc_list; i && compliant; i = i->next)
         {
           memset (pk, 0, sizeof *pk);
-          pk->pubkey_algo = i->pubkey_algo;
-          if (!get_pubkey (c->ctrl, pk, i->keyid)
+          pk->pubkey_algo = i->d.pubkey_algo;
+          if (!get_pubkey (c->ctrl, pk, i->d.keyid)
               && !gnupg_pk_is_compliant (CO_DE_VS, pk->pubkey_algo, 0,
                                          pk->pkey, nbits_from_pk (pk), NULL))
             compliant = 0;
@@ -1126,7 +1133,7 @@ static int
 proc_encrypt_cb (iobuf_t a, void *info )
 {
   CTX c = info;
-  return proc_encryption_packets (c->ctrl, info, a );
+  return proc_encryption_packets (c->ctrl, info, a, NULL, NULL);
 }
 
 
@@ -1516,7 +1523,7 @@ proc_packets (ctrl_t ctrl, void *anchor, iobuf_t a )
 
   c->ctrl = ctrl;
   c->anchor = anchor;
-  rc = do_proc_packets (c, a);
+  rc = do_proc_packets (c, a, 0);
   xfree (c);
 
   return rc;
@@ -1539,7 +1546,7 @@ proc_signature_packets (ctrl_t ctrl, void *anchor, iobuf_t a,
   c->signed_data.used = !!signedfiles;
 
   c->sigfilename = sigfilename;
-  rc = do_proc_packets (c, a);
+  rc = do_proc_packets (c, a, 0);
 
   /* If we have not encountered any signature we print an error
      messages, send a NODATA status back and return an error code.
@@ -1582,7 +1589,7 @@ proc_signature_packets_by_fd (ctrl_t ctrl, void *anchor, iobuf_t a,
   c->signed_data.data_names = NULL;
   c->signed_data.used = (signed_data_fd != GNUPG_INVALID_FD);
 
-  rc = do_proc_packets (c, a);
+  rc = do_proc_packets (c, a, 0);
 
   /* If we have not encountered any signature we print an error
      messages, send a NODATA status back and return an error code.
@@ -1606,8 +1613,13 @@ proc_signature_packets_by_fd (ctrl_t ctrl, void *anchor, iobuf_t a,
 }
 
 
-int
-proc_encryption_packets (ctrl_t ctrl, void *anchor, iobuf_t a )
+/* Handle encryption packets.  If called recursively the caller's CTX
+ * should be given for ANCHOR.  If R_DEK and R_LIST are not NULL the
+ * DEK (or NULL) is returned there and the list at R_LIST; the caller
+ * needs to release them; even if the function returns an error. */
+gpg_error_t
+proc_encryption_packets (ctrl_t ctrl, void *anchor, iobuf_t a,
+                         DEK **r_dek, struct pubkey_enc_list **r_list)
 {
   CTX c = xmalloc_clear (sizeof *c);
   int rc;
@@ -1615,7 +1627,16 @@ proc_encryption_packets (ctrl_t ctrl, void *anchor, iobuf_t a )
   c->ctrl = ctrl;
   c->anchor = anchor;
   c->encrypt_only = 1;
-  rc = do_proc_packets (c, a);
+  if (r_dek && r_list)
+    {
+      rc = do_proc_packets (c, a, 1);
+      *r_dek = c->dek;
+      c->dek = NULL;
+      *r_list = c->pkenc_list;
+      c->pkenc_list = NULL;
+    }
+  else
+    rc = do_proc_packets (c, a, 0);
   xfree (c);
   return rc;
 }
@@ -1640,8 +1661,11 @@ check_nesting (CTX c)
 }
 
 
+/* Main processing loop.  If KEEP_DEK_AND_LIST is set the DEK and
+ * PKENC_LIST of the context C are not released at the end of the
+ * function.  The caller is then required to do this.  */
 static int
-do_proc_packets (CTX c, iobuf_t a)
+do_proc_packets (CTX c, iobuf_t a, int keep_dek_and_list)
 {
   PACKET *pkt;
   struct parse_packet_ctx_s parsectx;
@@ -1662,6 +1686,18 @@ do_proc_packets (CTX c, iobuf_t a)
       any_data = 1;
       if (rc)
         {
+          if (c->ctrl->modify_recipients && gpg_err_code (rc) == GPG_ERR_TRUE)
+            {
+              /* Save the last read CTB (which was the last byte
+               * actually read from the input) and get out of the
+               * loop.  */
+              c->ctrl->last_read_ctb = parsectx.last_ctb;
+              /* We need to call the first part of the encrypted data
+               * handler to get the DEK.  */
+              proc_encrypted (c, NULL);
+              rc = -1;
+              break;
+            }
           free_packet (pkt, &parsectx);
           /* Stop processing when an invalid packet has been encountered
            * but don't do so when we are doing a --list-packets.  */
@@ -1720,8 +1756,19 @@ do_proc_packets (CTX c, iobuf_t a)
               goto leave;
 
             case PKT_SIGNATURE:   newpkt = add_signature (c, pkt); break;
-            case PKT_SYMKEY_ENC:  proc_symkey_enc (c, pkt); break;
-            case PKT_PUBKEY_ENC:  proc_pubkey_enc (c, pkt); break;
+
+            case PKT_SYMKEY_ENC:
+            case PKT_PUBKEY_ENC:
+              /* In --add-recipients mode set the stop flag as soon as
+               * we see the first of these packets.  */
+              if (c->ctrl->modify_recipients)
+                parsectx.only_fookey_enc = 1;
+              if (pkt->pkttype == PKT_SYMKEY_ENC)
+                proc_symkey_enc (c, pkt);
+              else
+                proc_pubkey_enc (c, pkt);
+              break;
+
             case PKT_ENCRYPTED:
             case PKT_ENCRYPTED_MDC:
             case PKT_ENCRYPTED_AEAD: proc_encrypted (c, pkt); break;
@@ -1797,8 +1844,8 @@ do_proc_packets (CTX c, iobuf_t a)
 
 
  leave:
-  release_list (c);
-  xfree(c->dek);
+  if (!keep_dek_and_list)
+    release_list (c);
   free_packet (pkt, &parsectx);
   deinit_parse_packet (&parsectx);
   xfree (pkt);
