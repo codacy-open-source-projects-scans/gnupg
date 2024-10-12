@@ -1503,7 +1503,7 @@ ecckey_from_sexp (gcry_mpi_t *array, gcry_sexp_t sexp,
       goto leave;
     }
   gcry_sexp_release (l2);
-  oidstr = openpgp_curve_to_oid (curve, &nbits, NULL);
+  oidstr = openpgp_curve_to_oid (curve, &nbits, NULL, pkversion > 4);
   if (!oidstr)
     {
       /* That can't happen because we used one of the curves
@@ -1511,9 +1511,6 @@ ecckey_from_sexp (gcry_mpi_t *array, gcry_sexp_t sexp,
       err = gpg_error (GPG_ERR_INV_OBJ);
       goto leave;
     }
-  /* For v5 keys we prefer the modern OID for cv25519.  */
-  if (pkversion > 4 && !strcmp (oidstr, "1.3.6.1.4.1.3029.1.5.1"))
-    oidstr = "1.3.101.110";
 
   err = openpgp_oid_from_str (oidstr, &array[0]);
   if (err)
@@ -4665,6 +4662,7 @@ prepare_adsk (ctrl_t ctrl, const char *name)
     {
       if (namebuffer && (p=strchr (namebuffer, '!')))
         *p = 0; /* Strip the ! for the diagnostic.  */
+      write_status_error ("add_adsk", err);
       log_error ("invalid ADSK '%s' specified: %s\n", name, gpg_strerror (err));
     }
   free_public_key (adsk_pk);

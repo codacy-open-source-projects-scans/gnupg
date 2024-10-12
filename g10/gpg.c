@@ -1983,7 +1983,7 @@ list_config(char *items)
 	  es_printf ("cfg:curveoid:");
           for (iter=0, first=1; (s = openpgp_enum_curves (&iter)); first = 0)
             {
-              s = openpgp_curve_to_oid (s, NULL, NULL);
+              s = openpgp_curve_to_oid (s, NULL, NULL, 1);
               es_printf ("%s%s", first?"":";", s? s:"[?]");
             }
 	  es_printf ("\n");
@@ -2012,11 +2012,11 @@ gpgconf_list (void)
              get_default_pubkey_algo ());
   /* This info only mode tells whether the we are running in de-vs
    * compliance mode.  This does not test all parameters but the basic
-   * conditions like a proper RNG and Libgcrypt.  AS of now we always
-   * return 0 because this version of gnupg has not yet received an
-   * approval. */
+   * conditions like a proper RNG and Libgcrypt.  */
   es_printf ("compliance_de_vs:%lu:%d:\n", GC_OPT_FLAG_DEFAULT,
-             0 /*gnupg_rng_is_compliant (CO_DE_VS)*/);
+             (opt.compliance==CO_DE_VS
+              && gnupg_rng_is_compliant (CO_DE_VS))?
+             atoi (gnupg_status_compliance_flag (CO_DE_VS)) : 0);
 
   es_printf ("use_keyboxd:%lu:%d:\n", GC_OPT_FLAG_DEFAULT, opt.use_keyboxd);
 
