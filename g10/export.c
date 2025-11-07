@@ -424,9 +424,6 @@ do_export (ctrl_t ctrl, strlist_t users, int secret, unsigned int options,
   IOBUF out = NULL;
   int any, rc;
   armor_filter_context_t *afx = NULL;
-  compress_filter_context_t zfx;
-
-  memset( &zfx, 0, sizeof zfx);
 
   rc = open_outfile (GNUPG_INVALID_FD, NULL, 0, !!secret, &out);
   if (rc)
@@ -1406,7 +1403,7 @@ transfer_format_to_openpgp (gcry_sexp_t s_pgp, PKT_public_key *pk)
 
 
 /* Print an "EXPORTED" status line.  PK is the primary public key.  */
-static void
+void
 print_status_exported (PKT_public_key *pk)
 {
   char *hexfpr;
@@ -2021,7 +2018,8 @@ do_export_one_keyblock (ctrl_t ctrl, kbnode_t keyblock, u32 *keyid,
               if (!err && node->pkt->pkttype == PKT_PUBLIC_KEY)
                 {
                   stats->exported++;
-                  print_status_exported (node->pkt->pkt.public_key);
+                  if (!(options & EXPORT_NO_STATUS))
+                    print_status_exported (node->pkt->pkt.public_key);
                 }
             }
           else if (!err)
@@ -2057,7 +2055,8 @@ do_export_one_keyblock (ctrl_t ctrl, kbnode_t keyblock, u32 *keyid,
                   if (node->pkt->pkttype == PKT_PUBLIC_KEY)
                     {
                       stats->exported++;
-                      print_status_exported (node->pkt->pkt.public_key);
+                      if (!(options & EXPORT_NO_STATUS))
+                        print_status_exported (node->pkt->pkt.public_key);
                     }
                 }
             }
@@ -2091,7 +2090,8 @@ do_export_one_keyblock (ctrl_t ctrl, kbnode_t keyblock, u32 *keyid,
           if (!err && node->pkt->pkttype == PKT_PUBLIC_KEY)
             {
               stats->exported++;
-              print_status_exported (node->pkt->pkt.public_key);
+              if (!(options & EXPORT_NO_STATUS))
+                print_status_exported (node->pkt->pkt.public_key);
             }
         }
 
@@ -2361,7 +2361,7 @@ do_export_stream (ctrl_t ctrl, iobuf_t out, strlist_t users, int secret,
           if (pk->version == 3)
             {
               log_info ("key %s: PGP 2.x style key (v3) export "
-                        "not yet supported - skipped\n", keystr (keyid));
+                        "not supported - skipped\n", keystr (keyid));
               continue;
             }
           stats->secret_count++;

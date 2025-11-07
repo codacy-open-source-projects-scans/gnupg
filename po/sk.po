@@ -543,6 +543,10 @@ msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "gpg-agent nie je v tomto sedení dostupný\n"
 
 #, fuzzy, c-format
+msgid "socket file removed - retrying binding\n"
+msgstr "kľúč %08lX: zmazaná viacnásobná väzba podkľúča\n"
+
+#, fuzzy, c-format
 msgid "error getting nonce for the socket\n"
 msgstr "chyba pri vytváraní hesla: %s\n"
 
@@ -769,6 +773,10 @@ msgstr "zmeniť heslo"
 
 msgid "I'll change it later"
 msgstr ""
+
+#, fuzzy, c-format
+msgid "Unprotecting key failed: %s\n"
+msgstr "zmazanie bloku kľúča sa nepodarilo:  %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr ""
@@ -1441,6 +1449,13 @@ msgstr ""
 msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr ""
 
+#, c-format
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr ""
 
@@ -1599,13 +1614,6 @@ msgstr "preskočené: tajný kľúč je už v databáze\n"
 msgid "Replace existing keys? (y/N) "
 msgstr ""
 
-#, c-format
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-
 #, fuzzy
 msgid "Please select the type of key to generate:\n"
 msgstr "Prosím, vyberte druh kľúča, ktorý chcete:\n"
@@ -1743,7 +1751,7 @@ msgid "Invalid command  (try \"help\")\n"
 msgstr "Neplatný príkaz (skúste \"help\")\n"
 
 #, fuzzy, c-format
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "Vytvorenie kľúča sa nepodarilo: %s\n"
 
 #, fuzzy
@@ -1908,6 +1916,11 @@ msgid "option '%s' may not be used in %s mode\n"
 msgstr ""
 "použitie %s nie je v móde %s dovolené\n"
 "\n"
+
+#, fuzzy, c-format
+#| msgid "can't connect to `%s': %s\n"
+msgid "already encrypted to %08lX\n"
+msgstr "nemôžem sa pripojiť k `%s': %s\n"
 
 #, fuzzy, c-format
 #| msgid "%s encrypted data\n"
@@ -2125,6 +2138,10 @@ msgstr "podpísať kľúč"
 #| msgid "sign a key locally"
 msgid "quickly sign a key locally"
 msgstr "podpísať kľúč lokálne"
+
+#, fuzzy
+msgid "quickly sign a key with a trust signature"
+msgstr "Nápoveda: Vyberte id užívateľa na podpísanie\n"
 
 #, fuzzy
 #| msgid "generate a new key pair"
@@ -2462,6 +2479,11 @@ msgstr "nastaviť zoznam predvolieb"
 #| msgid "change the ownertrust"
 msgid "show ownertrust"
 msgstr "zmeniť dôveryhodnosť vlastníka kľúča"
+
+#, fuzzy
+#| msgid "Critical signature notation: "
+msgid "show trust signature information"
+msgstr "Kritická podpisová notácia: "
 
 #, fuzzy, c-format
 msgid "unknown TOFU policy '%s'\n"
@@ -2805,6 +2827,9 @@ msgstr "|FD|zapísať informácie o stave do tohto FD"
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr ""
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr ""
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "Použitie: gpgv [možnosti] [súbory] (-h pre pomoc)"
 
@@ -2873,6 +2898,11 @@ msgstr ""
 #, fuzzy
 msgid "repair keys on import"
 msgstr "vypísať fingerprint"
+
+#, fuzzy
+#| msgid "list secret keys"
+msgid "do not import secret keys"
+msgstr "vypísať zoznam tajných kľúčov"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -3138,10 +3168,6 @@ msgstr "Identifikátor užívateľa už neplatí"
 #, c-format
 msgid "reason for revocation: "
 msgstr "dôvod na revokáciu: "
-
-#, c-format
-msgid "revocation comment: "
-msgstr "revokačná poznámka: "
 
 #, fuzzy, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -3894,6 +3920,11 @@ msgid "Nothing to sign.\n"
 msgstr "Nič na podpísanie kľúčom %08lX\n"
 
 #, fuzzy, c-format
+#| msgid "checking created signature failed: %s\n"
+msgid "creating key signature failed: %s\n"
+msgstr "kontrola vytvoreného podpisu sa nepodarila: %s\n"
+
+#, fuzzy, c-format
 msgid "Not signed by you.\n"
 msgstr "   podpísané %08lX v %s%s\n"
 
@@ -4432,6 +4463,10 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) RSA (len na šifrovanie)\n"
 
 #, fuzzy, c-format
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "   (%d) DSA a ElGamal (implicitný)\n"
+
+#, fuzzy, c-format
 #| msgid "   (%d) RSA (encrypt only)\n"
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) RSA (len na šifrovanie)\n"
@@ -4480,6 +4515,11 @@ msgstr "Požadovaná dĺžka kľúča je %u bitov.\n"
 #, fuzzy
 #| msgid "Please select what kind of key you want:\n"
 msgid "Please select which elliptic curve you want:\n"
+msgstr "Prosím, vyberte druh kľúča, ktorý chcete:\n"
+
+#, fuzzy, c-format
+#| msgid "Please select what kind of key you want:\n"
+msgid "Please select the %s variant you want:\n"
 msgstr "Prosím, vyberte druh kľúča, ktorý chcete:\n"
 
 msgid ""
@@ -4708,6 +4748,12 @@ msgstr "nemôžem vytvoriť `%s': %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "POZNÁMKA: platnosť tajného kľúča %08lX skončila %s\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+
 #, fuzzy, c-format
 #| msgid "writing public key to `%s'\n"
 msgid "writing public key to '%s'\n"
@@ -4822,6 +4868,10 @@ msgstr[1] ""
 msgid "Keyring"
 msgstr "súbor kľúčov (keyring)"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "revokačná poznámka: "
+
 msgid "Revocable by: "
 msgstr ""
 
@@ -4896,6 +4946,9 @@ msgstr ""
 msgid "honor the preferred keyserver URL set on the key"
 msgstr "zadané URL pre podpisovú politiku je neplatné\n"
 
+msgid "update a key before sending it"
+msgstr ""
+
 #, fuzzy
 msgid "disabled"
 msgstr "disable"
@@ -4910,6 +4963,10 @@ msgstr "neplatný parameter pre export\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr ""
+
+#, fuzzy, c-format
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "chyba: neplatný odtlačok\n"
 
 #, fuzzy, c-format
 msgid "refreshing %d key from %s\n"
@@ -4936,6 +4993,10 @@ msgstr "požadujem kľúč %08lX z %s\n"
 #, fuzzy, c-format
 msgid "no keyserver known\n"
 msgstr "neplatný parameter pre export\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "skipped \"%s\": %s\n"
@@ -5277,6 +5338,11 @@ msgstr "Nekomprimované"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "táto správa nemusí použiteľná s %s\n"
+
+#, fuzzy
+#| msgid "enable"
+msgid "enabled"
+msgstr "enable"
 
 #, fuzzy, c-format
 msgid "ambiguous option '%s'\n"
@@ -5786,6 +5852,10 @@ msgstr "kľúč %08lX: chyba identifikátor užívateľa\n"
 #, c-format
 msgid "okay, we are the anonymous recipient.\n"
 msgstr "o.k., my sme anonymný adresát.\n"
+
+#, fuzzy, c-format
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr "VAROVANIE: podpisovací podkľúč %08lX nie je krížovo certifikovaný\n"
 
 #, c-format
 msgid "old encoding of the DEK is not supported\n"
@@ -6649,13 +6719,19 @@ msgid_plural " (%d validity counts cleared)\n"
 msgstr[0] "%d kľúčov spracovaných (%d počtov platnosti vymazaných)\n"
 msgstr[1] "%d kľúčov spracovaných (%d počtov platnosti vymazaných)\n"
 
-#, c-format
-msgid "no ultimately trusted keys found\n"
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s not found\n"
 msgstr "neboli nájdené žiadne absolútne dôveryhodné kľúče\n"
 
 #, fuzzy, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr "verejný kľúč k absolútne dôveryhodnému kľúču  %08lX nebol nájdený\n"
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s expired\n"
+msgstr "neboli nájdené žiadne absolútne dôveryhodné kľúče\n"
+
+#, c-format
+msgid "no ultimately trusted keys found\n"
+msgstr "neboli nájdené žiadne absolútne dôveryhodné kľúče\n"
 
 #, c-format
 msgid ""
@@ -7834,9 +7910,9 @@ msgstr "chyba pri čítaní `%s': %s\n"
 msgid "Error - "
 msgstr ""
 
-#, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr ""
+#, fuzzy, c-format
+msgid "error writing to output: %s\n"
+msgstr "chyba pri zápise súboru kľúčov (keyring)  `%s': %s\n"
 
 #, fuzzy, c-format
 msgid "invalid formatted fingerprint in '%s', line %d\n"
@@ -9334,6 +9410,10 @@ msgid "manage the command history"
 msgstr ""
 
 #, fuzzy, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr "verejný kľúč k absolútne dôveryhodnému kľúču  %08lX nebol nájdený\n"
+
+#, fuzzy, c-format
 #~ msgid "waiting for process to terminate failed: ec=%d\n"
 #~ msgstr "aktualizácia zlyhala: %s\n"
 
@@ -9585,10 +9665,6 @@ msgstr ""
 
 #~ msgid "unable to read external program response: %s\n"
 #~ msgstr "nemožno cítať odozvu externého programu: %s\n"
-
-#, fuzzy
-#~ msgid "   (%d) ECC and ECC\n"
-#~ msgstr "   (%d) DSA a ElGamal (implicitný)\n"
 
 #, fuzzy
 #~ msgid "run without asking a user"
@@ -11134,9 +11210,6 @@ msgstr ""
 
 #~ msgid "disable"
 #~ msgstr "disable"
-
-#~ msgid "enable"
-#~ msgstr "enable"
 
 #~ msgid "showphoto"
 #~ msgstr "showphoto"

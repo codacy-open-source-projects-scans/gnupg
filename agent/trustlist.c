@@ -42,10 +42,11 @@ struct trustitem_s
     unsigned int for_pgp:1;        /* Set by '*' or 'P' as first flag. */
     unsigned int for_smime:1;      /* Set by '*' or 'S' as first flag. */
     unsigned int relax:1;          /* Relax checking of root certificate
-                             constraints. */
+                                      constraints.  Be default enabled. */
     unsigned int cm:1;             /* Use chain model for validation. */
     unsigned int qual:1;           /* Root CA for qualified signatures.  */
     unsigned int de_vs:1;          /* Root CA for de-vs compliant PKI.    */
+    unsigned int noconsent:1;      /* Do not require a conset for "qual". */
   } flags;
   unsigned char fpr[20];  /* The binary fingerprint. */
 };
@@ -161,6 +162,7 @@ read_one_trustfile (const char *fname, int systrust,
   int tableidx;
   size_t tablesize;
   int lnr = 0;
+  int no_trailing_lf = 0;
 
   table = *addr_of_table;
   tablesize = *addr_of_tablesize;
@@ -181,13 +183,17 @@ read_one_trustfile (const char *fname, int systrust,
       n = strlen (line);
       if (!n || line[n-1] != '\n')
         {
+          if (n && es_feof (fp))
+            no_trailing_lf = 1;  /* (The next fgets will break the loop.) */
           /* Eat until end of line. */
           while ( (c=es_getc (fp)) != EOF && c != '\n')
             ;
-          err = gpg_error (*line? GPG_ERR_LINE_TOO_LONG
+          err = gpg_error (*line && !no_trailing_lf? GPG_ERR_LINE_TOO_LONG
                            : GPG_ERR_INCOMPLETE_LINE);
           log_error (_("file '%s', line %d: %s\n"),
                      fname, lnr, gpg_strerror (err));
+          if (no_trailing_lf)
+            err = 0;  /* Clear the error.  */
           continue;
         }
       line[--n] = 0; /* Chop the LF. */
@@ -256,6 +262,7 @@ read_one_trustfile (const char *fname, int systrust,
       ti = table + tableidx;
 
       memset (&ti->flags, 0, sizeof ti->flags);
+      ti->flags.relax = 1;  /* Legacy flag;  use "norelax" to trun it off. */
       if (*p == '!')
         {
           ti->flags.disabled = 1;
@@ -321,10 +328,14 @@ read_one_trustfile (const char *fname, int systrust,
             }
           else if (n == 5 && !memcmp (p, "relax", 5))
             ti->flags.relax = 1;
+          else if (n == 7 && !memcmp (p, "norelax", 7))
+            ti->flags.relax = 0;
           else if (n == 2 && !memcmp (p, "cm", 2))
             ti->flags.cm = 1;
           else if (n == 4 && !memcmp (p, "qual", 4) && systrust)
             ti->flags.qual = 1;
+          else if (n == 9 && !memcmp (p, "noconsent", 9) && systrust)
+            ti->flags.noconsent = 1;
           else if (n == 5 && !memcmp (p, "de-vs", 5) && systrust)
             ti->flags.de_vs = 1;
           else
@@ -484,8 +495,9 @@ istrusted_internal (ctrl_t ctrl, const char *fpr, int listmode, int *r_disabled,
                in a locked state.  */
             if (already_locked)
               ;
-            else if (ti->flags.relax || ti->flags.cm || ti->flags.qual
-                     || ti->flags.de_vs)
+            else if (listmode || ti->flags.relax || ti->flags.cm
+                     || ti->flags.qual || ti->flags.de_vs
+                     || ti->flags.noconsent)
               {
                 unlock_trusttable ();
                 locked = 0;
@@ -502,6 +514,9 @@ istrusted_internal (ctrl_t ctrl, const char *fpr, int listmode, int *r_disabled,
                   err = agent_write_status (ctrl,"TRUSTLISTFLAG", "cm", NULL);
                 if (!err && ti->flags.qual)
                   err = agent_write_status (ctrl,"TRUSTLISTFLAG", "qual",NULL);
+                if (!err && ti->flags.noconsent)
+                  err = agent_write_status (ctrl,"TRUSTLISTFLAG", "noconsent",
+                                            NULL);
                 if (!err && ti->flags.de_vs)
                   err = agent_write_status (ctrl,"TRUSTLISTFLAG", "de-vs",NULL);
               }
@@ -868,8 +883,7 @@ agent_marktrusted (ctrl_t ctrl, const char *name, const char *fpr, int flag)
     }
   else
     es_fputs (nameformatted, fp);
-  es_fprintf (fp, "\n%s%s %c%s\n", yes_i_trust?"":"!", fprformatted, flag,
-              flag == 'S'? " relax":"");
+  es_fprintf (fp, "\n%s%s %c\n", yes_i_trust?"":"!", fprformatted, flag);
   if (es_ferror (fp))
     err = gpg_error_from_syserror ();
 

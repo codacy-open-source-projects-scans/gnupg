@@ -5,13 +5,13 @@
 # Yoshihiro Kajiki <kajiki@ylug.org>, 1999.
 # Takashi P.KATOH, 2002.
 # NIIBE Yutaka <gniibe@fsij.org>, 2013, 2014, 2015, 2016, 2017, 2018, 2019,
-# 2020, 2021, 2022, 2023, 2024.
+# 2020, 2021, 2022, 2023, 2024, 2025.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: gnupg 2.5.0\n"
+"Project-Id-Version: gnupg 2.5.12\n"
 "Report-Msgid-Bugs-To: translations@gnupg.org\n"
-"PO-Revision-Date: 2024-09-25 14:25+0900\n"
+"PO-Revision-Date: 2025-10-22 10:19+0900\n"
 "Last-Translator: NIIBE Yutaka <gniibe@fsij.org>\n"
 "Language-Team: none\n"
 "Language: ja\n"
@@ -515,6 +515,10 @@ msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "gpg-agentは既に実行されています - 新しいものをスタートさせません\n"
 
 #, c-format
+msgid "socket file removed - retrying binding\n"
+msgstr "ソケットファイルを削除しました - バインドを再度試みます\n"
+
+#, c-format
 msgid "error getting nonce for the socket\n"
 msgstr "ソケットのナンス取得エラー\n"
 
@@ -744,6 +748,10 @@ msgstr "パスフレーズを変更する"
 
 msgid "I'll change it later"
 msgstr "後で変更する"
+
+#, c-format
+msgid "Unprotecting key failed: %s\n"
+msgstr "鍵の保護解除に失敗しました: %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr "以下のシリアル番号のカードを挿入してください"
@@ -1371,6 +1379,16 @@ msgstr "強制"
 msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr "一覧が正しくないように見える場合、コマンド \"%s\" を試してください\n"
 
+#, c-format
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+"工場設定のPINは下記のとおり\n"
+"   PIN = '%s'     管理者PIN = '%s'\n"
+"次のコマンドを使って変更すべきです --change-pin\n"
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr "エラー： 普通のASCIIだけが今、許可されています。\n"
 
@@ -1524,16 +1542,6 @@ msgstr "注意: 秘密鍵はもうカードに保管してあります!\n"
 msgid "Replace existing keys? (y/N) "
 msgstr "既存の鍵を置き換えますか? (y/N) "
 
-#, c-format
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-"工場設定のPINは下記のとおり\n"
-"   PIN = '%s'     管理者PIN = '%s'\n"
-"次のコマンドを使って変更すべきです --change-pin\n"
-
 msgid "Please select the type of key to generate:\n"
 msgstr "生成する鍵の型を選択してください:\n"
 
@@ -1651,7 +1659,7 @@ msgid "Invalid command  (try \"help\")\n"
 msgstr "無効なコマンド (\"help\"を参照)\n"
 
 #, c-format
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "受取人を変更することはできません: %s\n"
 
 msgid "decryption failed"
@@ -1801,6 +1809,11 @@ msgstr "削除された受取人の数: %u\n"
 #, c-format
 msgid "option '%s' may not be used in %s mode\n"
 msgstr "オプション'%s'を%sモードで使うことはできません\n"
+
+#, fuzzy, c-format
+#| msgid "can't encrypt to '%s'\n"
+msgid "already encrypted to %08lX\n"
+msgstr "'%s'に暗号化できません\n"
 
 #, c-format
 msgid "%s encrypted data\n"
@@ -1984,6 +1997,9 @@ msgstr "すばやく鍵に署名"
 
 msgid "quickly sign a key locally"
 msgstr "すばやく鍵へローカルに署名"
+
+msgid "quickly sign a key with a trust signature"
+msgstr "すばやく鍵に信用署名を署名"
 
 msgid "quickly revoke a key signature"
 msgstr "すばやく鍵への署名を失効"
@@ -2274,6 +2290,9 @@ msgstr "優先指定の表示"
 
 msgid "show ownertrust"
 msgstr "所有者信用の表示"
+
+msgid "show trust signature information"
+msgstr "信用署名の情報の表示"
 
 #, c-format
 msgid "unknown TOFU policy '%s'\n"
@@ -2604,6 +2623,9 @@ msgstr "|FD|このFDにステイタス情報を書き出す"
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr "|ALGO|ALGOで作成された署名を拒絶する"
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr "|NAME|stdoutに注釈 NAME を出力する"
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "使い方: gpgv [オプション] [ファイル] (ヘルプは -h)"
 
@@ -2662,6 +2684,9 @@ msgstr "GnuPGの鍵のバックアップフォーマットを仮定します"
 
 msgid "repair keys on import"
 msgstr "インポートの際、鍵を修復する"
+
+msgid "do not import secret keys"
+msgstr "秘密鍵をインポートしない"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -2924,10 +2949,6 @@ msgstr "ユーザIDがもはや有効でありません"
 #, c-format
 msgid "reason for revocation: "
 msgstr "失効理由: "
-
-#, c-format
-msgid "revocation comment: "
-msgstr "失効のコメント: "
 
 #, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -3379,7 +3400,7 @@ msgid "add a revocation key"
 msgstr "失効鍵の追加"
 
 msgid "add an additional decryption subkey"
-msgstr "追加の復号用の副鍵を足す"
+msgstr "追加復号用の副鍵を足す"
 
 msgid "delete signatures from the selected user IDs"
 msgstr "選択したユーザIDから署名を削除する"
@@ -3595,6 +3616,10 @@ msgid "Nothing to sign.\n"
 msgstr "署名するものがありません。\n"
 
 #, c-format
+msgid "creating key signature failed: %s\n"
+msgstr "鍵の署名の作成に失敗しました: %s\n"
+
+#, c-format
 msgid "Not signed by you.\n"
 msgstr "あなたによって署名されていません。\n"
 
@@ -3794,7 +3819,7 @@ msgid ""
 msgstr "本当にこの鍵を指名失効者に任命しますか? (y/N) "
 
 msgid "Enter the fingerprint of the additional decryption subkey: "
-msgstr "追加の復号用の副鍵のフィンガー・プリントを入力してください:"
+msgstr "追加復号用の副鍵のフィンガー・プリントを入力してください:"
 
 #, c-format
 msgid "Did you specify the fingerprint of a subkey?\n"
@@ -4104,6 +4129,10 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) カードに存在する鍵%s\n"
 
 #, c-format
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "   (%d) ECC と Kyber%s\n"
+
+#, c-format
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) Kyber (暗号化のみ)%s\n"
 
@@ -4146,6 +4175,10 @@ msgstr "要求された鍵長は%uビット\n"
 
 msgid "Please select which elliptic curve you want:\n"
 msgstr "ご希望の楕円曲線を選択してください:\n"
+
+#, c-format
+msgid "Please select the %s variant you want:\n"
+msgstr "ご希望の種類 %s を選択してください:\n"
 
 msgid ""
 "Please specify how long the key should be valid.\n"
@@ -4368,6 +4401,15 @@ msgstr "バックアップ・ファイル'%s'が作成できません: %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "注意: カード鍵のバックアップが'%s'へ保存されます\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+"警告: カードに鍵は書き込まれましたが、バックアップファイルはディスクに正し\n"
+"         く書き込まれませんでした。全体の操作を繰り返すか、新しい暗号鍵を\n"
+"         カードで作成したいでしょう。\n"
+
 #, c-format
 msgid "writing public key to '%s'\n"
 msgstr "'%s'へ公開鍵を書き込みます\n"
@@ -4467,6 +4509,10 @@ msgstr[0] "警告: %lu個の鍵がその大きさのためスキップされま�
 msgid "Keyring"
 msgstr "鍵リング"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "失効のコメント: "
+
 msgid "Revocable by: "
 msgstr "以下によって失効可能:"
 
@@ -4535,6 +4581,9 @@ msgstr "署名の検証時に自動的に鍵を取得する"
 msgid "honor the preferred keyserver URL set on the key"
 msgstr "鍵に設定される優先鍵サーバURLを与える"
 
+msgid "update a key before sending it"
+msgstr "送信する前に鍵を更新する"
+
 msgid "disabled"
 msgstr "使用禁止"
 
@@ -4548,6 +4597,10 @@ msgstr "無効な鍵サーバ・プロトコルです (us %d!=handler %d)\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr "\"%s\"鍵IDではありません: スキップします\n"
+
+#, c-format
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "\"%s\"はフィンガープリントではありません: スキップします\n"
 
 #, c-format
 msgid "refreshing %d key from %s\n"
@@ -4573,6 +4626,10 @@ msgstr "鍵%sを%sに要求\n"
 #, c-format
 msgid "no keyserver known\n"
 msgstr "鍵サーバがわかりません\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr "非LDAP鍵サーバのため、アップロードはスキップしました\n"
 
 #, c-format
 msgid "skipped \"%s\": %s\n"
@@ -4899,6 +4956,9 @@ msgstr "無圧縮|なし"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "このメッセージは、%sでは使用できません\n"
+
+msgid "enabled"
+msgstr "有効"
 
 #, c-format
 msgid "ambiguous option '%s'\n"
@@ -5376,6 +5436,10 @@ msgid "okay, we are the anonymous recipient.\n"
 msgstr "終了。匿名の受取人用です。\n"
 
 #, c-format
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr "*警告*: セッション鍵は耐量子ではありません\n"
+
+#, c-format
 msgid "old encoding of the DEK is not supported\n"
 msgstr "DEKの旧式エンコーディングは、サポートしていません\n"
 
@@ -5621,7 +5685,7 @@ msgstr "鍵%s: 副鍵対応への署名に対する副鍵がありません\n"
 
 #, c-format
 msgid "WARNING: unable to %%-expand notation (too large).  Using unexpanded.\n"
-msgstr "*警告*: 表記を%%拡張不能 (大きすぎ)。拡張せずに使用。\n"
+msgstr "*警告*: 注釈を%%拡張不能 (大きすぎ)。拡張せずに使用。\n"
 
 #, c-format
 msgid ""
@@ -6177,12 +6241,16 @@ msgid_plural " (%d validity counts cleared)\n"
 msgstr[0] " (うち%d本の有効性数をクリア)\n"
 
 #, c-format
-msgid "no ultimately trusted keys found\n"
-msgstr "究極的に信用する鍵が見つかりません\n"
+msgid "Note: ultimately trusted key %s not found\n"
+msgstr "注意: 究極的に信用する鍵 %s が見つかりません\n"
 
 #, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr "究極的に信用する鍵%sの公開鍵が見つかりません\n"
+msgid "Note: ultimately trusted key %s expired\n"
+msgstr "注意: 究極的に信用する鍵 %s が失効しています\n"
+
+#, c-format
+msgid "no ultimately trusted keys found\n"
+msgstr "究極的に信用する鍵が見つかりません\n"
 
 #, c-format
 msgid ""
@@ -7306,8 +7374,8 @@ msgid "Error - "
 msgstr "エラー - "
 
 #, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr "GPG_TTY が設定されていません - 少々疑問のデフォルトを使います\n"
+msgid "error writing to output: %s\n"
+msgstr "出力への書き込みエラー: %s\n"
 
 #, c-format
 msgid "invalid formatted fingerprint in '%s', line %d\n"
@@ -8760,6 +8828,14 @@ msgid "manage the command history"
 msgstr "コマンド履歴を管理する"
 
 #, c-format
+#~ msgid "GPG_TTY has not been set - using maybe bogus default\n"
+#~ msgstr "GPG_TTY が設定されていません - 少々疑問のデフォルトを使います\n"
+
+#, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr "究極的に信用する鍵%sの公開鍵が見つかりません\n"
+
+#, c-format
 #~ msgid "waiting for process %d to terminate failed: %s\n"
 #~ msgstr "プロセス%dの終了待ちが失敗: %s\n"
 
@@ -9044,9 +9120,6 @@ msgstr "コマンド履歴を管理する"
 
 #~ msgid "elevate the trust of signatures with valid PKA data"
 #~ msgstr "有効なPKAデータで署名の信用度を上昇させる"
-
-#~ msgid "   (%d) ECC and ECC\n"
-#~ msgstr "   (%d) ECC と ECC\n"
 
 #~ msgid "honor the PKA record set on a key when retrieving keys"
 #~ msgstr "鍵に設定されたPKAレコードを鍵の取得時に与える"

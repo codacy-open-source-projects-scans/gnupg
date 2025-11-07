@@ -1055,7 +1055,7 @@ do_process_spawn_io (scheme *sc, pointer args)
         if (ret < 0)
           break;
 
-        if (FD_ISSET (out_fd, &read_fdset))
+        if (out_fd >= 0 && FD_ISSET (out_fd, &read_fdset))
           {
             bytes_read = read (out_fd, out_string + out_off,
                                out_len - out_off);
@@ -1079,7 +1079,7 @@ do_process_spawn_io (scheme *sc, pointer args)
               }
           }
 
-        if (FD_ISSET (err_fd, &read_fdset))
+        if (err_fd >= 0 && FD_ISSET (err_fd, &read_fdset))
           {
             bytes_read = read (err_fd, err_string + err_off,
                                err_len - err_off);
@@ -1222,12 +1222,23 @@ do_process_wait (scheme *sc, pointer args)
   FFI_ARG_OR_RETURN (sc, struct proc_object_box *, box, proc, args);
   FFI_ARG_OR_RETURN (sc, int, hang, bool, args);
   FFI_ARGS_DONE_OR_RETURN (sc, args);
-  err = gpgrt_process_wait (box->proc, hang);
-  if (!err)
-    err = gpgrt_process_ctl (box->proc, GPGRT_PROCESS_GET_EXIT_ID, &retcode);
-  if (err == GPG_ERR_TIMEOUT)
-    err = 0;
-
+  if (!box->proc)
+    {
+      if (verbose)
+        fprintf (stderr, "caught already (%p)\n", box);
+    }
+  else
+    {
+      err = gpgrt_process_wait (box->proc, hang);
+      if (!err)
+        {
+          err = gpgrt_process_ctl (box->proc, GPGRT_PROCESS_GET_EXIT_ID, &retcode);
+          gpgrt_process_release (box->proc);
+          box->proc = NULL;
+        }
+      if (err == GPG_ERR_TIMEOUT)
+        err = 0;
+    }
   FFI_RETURN_INT (sc, retcode);
 }
 
@@ -1667,6 +1678,11 @@ ffi_init (scheme *sc, const char *argv0, const char *scriptname,
   ffi_define_function (sc, getenv);
   ffi_define_function (sc, setenv);
   ffi_define_function_name (sc, "_exit", exit);
+  /* AIX defines open to open64 which breaks the macro expansion to
+     'do_open' if it is not undefined.  */
+#ifdef open
+# undef open
+#endif
   ffi_define_function (sc, open);
   ffi_define_function (sc, fdopen);
   ffi_define_function (sc, close);

@@ -394,7 +394,7 @@ divert_pkdecrypt (ctrl_t ctrl,
   int depth;
   const unsigned char *ciphertext;
   size_t ciphertextlen;
-  char *plaintext;
+  unsigned char *plaintext;
   size_t plaintextlen;
 
   bin2hex (grip, 20, hexgrip);
@@ -504,24 +504,35 @@ agent_card_ecc_kem (ctrl_t ctrl, const unsigned char *ecc_ct,
                     size_t ecc_point_len, unsigned char *ecc_ecdh)
 {
   gpg_error_t err = 0;
-  char *ecdh = NULL;
+  unsigned char *ecdh = NULL;
   size_t len;
   int rc;
+  char hexgrip[KEYGRIP_LEN*2+1];
 
-  rc = agent_card_pkdecrypt (ctrl, ctrl->keygrip, getpin_cb, ctrl, NULL,
+  bin2hex (ctrl->keygrip, KEYGRIP_LEN, hexgrip);
+  rc = agent_card_pkdecrypt (ctrl, hexgrip, getpin_cb, ctrl, NULL,
                              ecc_ct, ecc_point_len, &ecdh, &len, NULL);
   if (rc)
     return rc;
 
-  if (len != ecc_point_len)
+  if (len == ecc_point_len)
+    memcpy (ecc_ecdh, ecdh, len);
+  else if (len && (len - 1) * 2 == ecc_point_len - 1
+           && (ecdh[0] == 0x41 || (ecdh[0] & ~1) == 0x02))
+    {
+      /* It's x-coordinate-only (compressed) point representation.  */
+      memcpy (ecc_ecdh, ecdh, len);
+      memset (ecc_ecdh + len, 0, ecc_point_len - len);
+    }
+  else if (len == ecc_point_len + 1 && ecdh[0] == 0x40) /* The prefix */
+    memcpy (ecc_ecdh, ecdh + 1, len - 1);
+  else
     {
       if (opt.verbose)
         log_info ("%s: ECC result length invalid (%zu != %zu)\n",
                   __func__, len, ecc_point_len);
       return gpg_error (GPG_ERR_INV_DATA);
     }
-  else
-    memcpy (ecc_ecdh, ecdh, len);
 
   xfree (ecdh);
   return err;

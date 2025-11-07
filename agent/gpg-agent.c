@@ -146,6 +146,7 @@ enum cmd_and_opt_values
   oAutoExpandSecmem,
   oListenBacklog,
   oInactivityTimeout,
+  oChangeStdEnvName,
 
   oWriteEnvFile,
 
@@ -169,7 +170,7 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_s_n (oDaemon,  "daemon", N_("run in daemon mode (background)")),
   ARGPARSE_s_n (oServer,  "server", N_("run in server mode (foreground)")),
 #ifndef HAVE_W32_SYSTEM
-  ARGPARSE_s_n (oSupervised,  "supervised", "@"),
+  ARGPARSE_s_n (oSupervised,  "deprecated-supervised", "@"),
 #endif
   ARGPARSE_s_n (oNoDetach,  "no-detach", N_("do not detach from the console")),
   ARGPARSE_s_n (oSh,	  "sh",        N_("sh-style command output")),
@@ -239,7 +240,7 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_s_i (oListenBacklog, "listen-backlog", "@"),
   ARGPARSE_op_u (oAutoExpandSecmem, "auto-expand-secmem", "@"),
   ARGPARSE_s_s (oFakedSystemTime, "faked-system-time", "@"),
-
+  ARGPARSE_s_s (oChangeStdEnvName, "change-std-env-name", "@"),
 
   ARGPARSE_header ("Security", N_("Options controlling the security")),
 
@@ -714,10 +715,10 @@ map_supervised_sockets (gnupg_fd_t *r_fd,
   envvar = getenv ("LISTEN_PID");
   if (!envvar)
     log_error ("no LISTEN_PID environment variable found in "
-               "--supervised mode (ignoring)\n");
+               "--deprecated-supervised mode (ignoring)\n");
   else if (strtoul (envvar, NULL, 10) != (unsigned long)getpid ())
     log_error ("environment variable LISTEN_PID (%lu) does not match"
-               " our pid (%lu) in --supervised mode (ignoring)\n",
+               " our pid (%lu) in --deprecated-supervised mode (ignoring)\n",
                (unsigned long)strtoul (envvar, NULL, 10),
                (unsigned long)getpid ());
 
@@ -747,21 +748,23 @@ map_supervised_sockets (gnupg_fd_t *r_fd,
     fd_count = atoi (envvar);
   else if (fdnames)
     {
-      log_error ("no LISTEN_FDS environment variable found in --supervised"
+      log_error ("no LISTEN_FDS environment variable found in"
+                 " --deprecated-supervised"
                  " mode (relying on LISTEN_FDNAMES instead)\n");
       fd_count = nfdnames;
     }
   else
     {
       log_error ("no LISTEN_FDS or LISTEN_FDNAMES environment variables "
-                "found in --supervised mode"
+                "found in --deprecated-supervised mode"
                 " (assuming 1 active descriptor)\n");
       fd_count = 1;
     }
 
   if (fd_count < 1)
     {
-      log_error ("--supervised mode expects at least one file descriptor"
+      log_error ("--deprecated-supervised mode expects at least"
+                 " one file descriptor"
                  " (was told %d, carrying on as though it were 1)\n",
                  fd_count);
       fd_count = 1;
@@ -774,11 +777,12 @@ map_supervised_sockets (gnupg_fd_t *r_fd,
 
       if (fd_count != 1)
         log_error ("no LISTEN_FDNAMES and LISTEN_FDS (%d) != 1"
-                   " in --supervised mode."
+                   " in --deprecated-supervised mode."
                    " (ignoring all sockets but the first one)\n",
                    fd_count);
       if (fstat (3, &statbuf) == -1 && errno ==EBADF)
-        log_fatal ("file descriptor 3 must be valid in --supervised mode"
+        log_fatal ("file descriptor 3 must be valid in"
+                   " --deprecated-supervised mode"
                    " if LISTEN_FDNAMES is not set\n");
       *r_fd = 3;
       socket_name = gnupg_get_socket_name (3);
@@ -786,7 +790,7 @@ map_supervised_sockets (gnupg_fd_t *r_fd,
   else if (fd_count != nfdnames)
     {
       log_fatal ("number of items in LISTEN_FDNAMES (%d) does not match "
-                 "LISTEN_FDS (%d) in --supervised mode\n",
+                 "LISTEN_FDS (%d) in --deprecated-supervised mode\n",
                  nfdnames, fd_count);
     }
   else
@@ -1295,6 +1299,10 @@ main (int argc, char **argv)
 
         case oKeepTTY: opt.keep_tty = 1; break;
         case oKeepDISPLAY: opt.keep_display = 1; break;
+
+        case oChangeStdEnvName:
+          session_env_mod_stdenvnames (pargs.r.ret_str);
+          break;
 
 	case oSSHSupport:
           ssh_support = 1;
@@ -2299,7 +2307,7 @@ create_server_socket (char *name, int primary, int cygwin,
       if (primary && !check_for_running_agent (1))
         {
           if (steal_socket)
-            log_info (N_("trying to steal socket from running %s\n"),
+            log_info (_("trying to steal socket from running %s\n"),
                       "gpg-agent");
           else
             {
@@ -2314,17 +2322,19 @@ create_server_socket (char *name, int primary, int cygwin,
             }
         }
       gnupg_remove (unaddr->sun_path);
+      log_info (_("socket file removed - retrying binding\n"));
       rc = assuan_sock_bind (fd, addr, len);
     }
   if (rc != -1 && (rc=assuan_sock_get_nonce (addr, len, nonce)))
     log_error (_("error getting nonce for the socket\n"));
   if (rc == -1)
     {
+      rc = gpg_error_from_syserror ();
+      log_libassuan_system_error (fd);
       /* We use gpg_strerror here because it allows us to get strings
          for some W32 socket error codes.  */
       log_error (_("error binding socket to '%s': %s\n"),
-                 unaddr->sun_path,
-                 gpg_strerror (gpg_error_from_syserror ()));
+                 unaddr->sun_path, gpg_strerror (rc));
 
       assuan_sock_close (fd);
       *name = 0; /* Inhibit removal of the socket by cleanup(). */
@@ -2675,7 +2685,6 @@ putty_message_proc (HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
   xfree (ctrl);
   if (data)
     UnmapViewOfFile (data);
-  xfree (mapsid);
   if (psd)
     LocalFree (psd);
   xfree (mysid);
@@ -3293,8 +3302,10 @@ handle_connections (gnupg_fd_t listen_fd,
                                        (struct sockaddr *)&paddr, &plen);
               if (fd == GNUPG_INVALID_FD)
                 {
+                  gpg_error_t myerr = gpg_error_from_syserror ();
+                  log_libassuan_system_error (listentbl[idx].l_fd);
                   log_error ("accept failed for %s: %s\n",
-                             listentbl[idx].name, strerror (errno));
+                             listentbl[idx].name, gpg_strerror (myerr));
                 }
               else if ( !(ctrl = xtrycalloc (1, sizeof *ctrl)))
                 {

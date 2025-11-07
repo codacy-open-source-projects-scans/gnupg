@@ -65,6 +65,7 @@
 #include "../common/init.h"
 #include "../common/mbox-util.h"
 #include "../common/zb32.h"
+#include "../common/recsel.h"
 #include "../common/shareddefs.h"
 #include "../common/compliance.h"
 #include "../common/comopt.h"
@@ -130,6 +131,7 @@ enum cmd_and_opt_values
     aLSignKey,
     aQuickSignKey,
     aQuickLSignKey,
+    aQuickTSignKey,
     aQuickRevSig,
     aQuickAddUid,
     aQuickAddKey,
@@ -377,6 +379,8 @@ enum cmd_and_opt_values
     oNoAutoKeyRetrieve,
     oAutoKeyImport,
     oNoAutoKeyImport,
+    oAutoKeyUpload,
+    oNoAutoKeyUpload,
     oUseAgent,
     oNoUseAgent,
     oGpgAgentInfo,
@@ -461,6 +465,7 @@ enum cmd_and_opt_values
     oAssertPubkeyAlgo,
     oKbxBufferSize,
     oRequirePQCEncryption,
+    oDisablePQCEncryption,
     oProcAllSigs,
 
     oNoop
@@ -528,6 +533,8 @@ static gpgrt_opt_t opts[] = {
               N_("quickly sign a key")),
   ARGPARSE_c (aQuickLSignKey, "quick-lsign-key",
               N_("quickly sign a key locally")),
+  ARGPARSE_c (aQuickTSignKey, "quick-tsign-key",
+              N_("quickly sign a key with a trust signature")),
   ARGPARSE_c (aQuickRevSig,   "quick-revoke-sig" ,
               N_("quickly revoke a key signature")),
   ARGPARSE_c (aSignKey,  "sign-key"   ,N_("sign a key")),
@@ -803,6 +810,8 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_s_n (oNoAutoKeyImport, "no-auto-key-import", "@"),
   ARGPARSE_s_n (oAutoKeyRetrieve, "auto-key-retrieve", "@"),
   ARGPARSE_s_n (oNoAutoKeyRetrieve, "no-auto-key-retrieve", "@"),
+  ARGPARSE_s_n (oAutoKeyUpload, "auto-key-upload", "@"),
+  ARGPARSE_s_n (oNoAutoKeyUpload, "no-auto-key-upload", "@"),
   ARGPARSE_s_n (oIncludeKeyBlock, "include-key-block",
                 N_("include the public key in signatures")),
   ARGPARSE_s_n (oNoIncludeKeyBlock, "no-include-key-block", "@"),
@@ -907,6 +916,7 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_s_s (oDigestAlgo, "digest-algo", "@"),
   ARGPARSE_s_s (oCertDigestAlgo, "cert-digest-algo", "@"),
   ARGPARSE_s_n (oRequirePQCEncryption, "require-pqc-encryption", "@"),
+  ARGPARSE_s_n (oDisablePQCEncryption, "disable-pqc-encryption", "@"),
 
   ARGPARSE_header (NULL, N_("Options for unattended use")),
 
@@ -1038,6 +1048,7 @@ static struct debug_flags_s debug_flags [] =
     { DBG_TRUST_VALUE  , "trust"   },
     { DBG_HASHING_VALUE, "hashing" },
     { DBG_IPC_VALUE    , "ipc"     },
+    { DBG_RECSEL_VALUE , "recsel"  },
     { DBG_CLOCK_VALUE  , "clock"   },
     { DBG_LOOKUP_VALUE , "lookup"  },
     { DBG_EXTPROG_VALUE, "extprog" },
@@ -1051,6 +1062,9 @@ static struct compatibility_flags_s compatibility_flags [] =
   {
     { COMPAT_PARALLELIZED, "parallelized" },
     { COMPAT_T7014_OLD,    "t7014-old" },
+    { COMPAT_COMPR_KEYS,   "compr-keys" },
+    { COMPAT_NO_MANU,      "no-manu" },
+    { COMPAT_SUGGEST_EMBEDDED_NAME, "suggest-embedded-name" },
     { 0, NULL }
   };
 
@@ -1407,6 +1421,9 @@ set_debug (const char *level)
     opt.verbose = 1;
   if (opt.debug && opt.quiet)
     opt.quiet = 0;
+
+  /* Pass debug flags to the record selection module.  */
+  recsel_set_debug (!!DBG_RECSEL);
 
   if (opt_set_iobuf_size || opt_set_iobuf_size_used)
     log_debug ("iobuf buffer size is %uk\n",
@@ -2105,6 +2122,8 @@ parse_list_options(char *str)
        NULL},
       {"show-user-notations",LIST_SHOW_USER_NOTATIONS,NULL,
        N_("show user-supplied notations during signature listings")},
+      {"show-hidden-notations",LIST_SHOW_HIDDEN_NOTATIONS,NULL,
+       NULL},
       {"show-x509-notations",LIST_SHOW_X509_NOTATIONS,NULL, NULL },
       {"store-x509-notations",LIST_STORE_X509_NOTATIONS,NULL, NULL },
       {"show-keyserver-urls",LIST_SHOW_KEYSERVER_URLS,NULL,
@@ -2127,6 +2146,8 @@ parse_list_options(char *str)
        N_("show preferences")},
       {"show-ownertrust", LIST_SHOW_OWNERTRUST, NULL,
        N_("show ownertrust")},
+      {"show-trustsig", LIST_SHOW_TRUSTSIG, NULL,
+       N_("show trust signature information")},
       {"show-only-fpr-mbox",LIST_SHOW_ONLY_FPR_MBOX, NULL,
        NULL},
       {"sort-sigs", LIST_SORT_SIGS, NULL,
@@ -2277,17 +2298,14 @@ set_compliance_option (enum cmd_and_opt_values option)
 {
   switch (option)
     {
-    case oOpenPGP:
-    case oRFC4880:
-      /* This is effectively the same as RFC2440, but with
-         "--enable-dsa2 --no-rfc2440-text --escape-from-lines
-         --require-cross-certification". */
-      opt.compliance = CO_RFC4880;
-      opt.flags.dsa2 = 1;
+    case oGnuPG:
+      /* set up default options affected by policy compliance: */
+      opt.compliance = CO_GNUPG;
+      opt.flags.dsa2 = 0;
       opt.flags.require_cross_cert = 1;
       opt.rfc2440_text = 0;
-      opt.allow_non_selfsigned_uid = 1;
-      opt.allow_freeform_uid = 1;
+      opt.allow_non_selfsigned_uid = 0;
+      opt.allow_freeform_uid = 0;
       opt.escape_from = 1;
       opt.not_dash_escaped = 0;
       opt.def_cipher_algo = 0;
@@ -2295,35 +2313,50 @@ set_compliance_option (enum cmd_and_opt_values option)
       opt.cert_digest_algo = 0;
       opt.compress_algo = -1;
       opt.s2k_mode = 3; /* iterated+salted */
+      opt.s2k_digest_algo = 0;
+      opt.s2k_cipher_algo = DEFAULT_CIPHER_ALGO;
+      opt.flags.allow_old_cipher_algos = 0;
+      break;
+
+    case oOpenPGP:
+    case oRFC4880:
+      /* This is effectively the same as RFC2440, but with
+         "--enable-dsa2 --no-rfc2440-text --escape-from-lines
+         --require-cross-certification". */
+      set_compliance_option (oGnuPG);
+      opt.compliance = CO_RFC4880;
+      opt.flags.dsa2 = 1;
+      opt.allow_non_selfsigned_uid = 1;
+      opt.allow_freeform_uid = 1;
       opt.s2k_digest_algo = DIGEST_ALGO_SHA1;
       opt.s2k_cipher_algo = CIPHER_ALGO_3DES;
       opt.flags.allow_old_cipher_algos = 1;
       break;
+
     case oRFC2440:
+      set_compliance_option (oGnuPG);
       opt.compliance = CO_RFC2440;
-      opt.flags.dsa2 = 0;
+      opt.flags.require_cross_cert = 0;
       opt.rfc2440_text = 1;
       opt.allow_non_selfsigned_uid = 1;
       opt.allow_freeform_uid = 1;
       opt.escape_from = 0;
-      opt.not_dash_escaped = 0;
-      opt.def_cipher_algo = 0;
-      opt.def_digest_algo = 0;
-      opt.cert_digest_algo = 0;
-      opt.compress_algo = -1;
-      opt.s2k_mode = 3; /* iterated+salted */
       opt.s2k_digest_algo = DIGEST_ALGO_SHA1;
       opt.s2k_cipher_algo = CIPHER_ALGO_3DES;
       opt.flags.allow_old_cipher_algos = 1;
       break;
-    case oPGP7:  opt.compliance = CO_PGP7;  break;
-    case oPGP8:  opt.compliance = CO_PGP8;  break;
-    case oGnuPG:
-      opt.compliance = CO_GNUPG;
+
+    case oPGP7:
+      set_compliance_option (oGnuPG);
+      opt.compliance = CO_PGP7;
+      break;
+    case oPGP8:
+      set_compliance_option (oGnuPG);
+      opt.compliance = CO_PGP8;
       break;
 
     case oDE_VS:
-      set_compliance_option (oOpenPGP);
+      set_compliance_option (oGnuPG);
       opt.compliance = CO_DE_VS;
       /* We divert here from the backward compatible rfc4880 algos.  */
       opt.s2k_digest_algo = DIGEST_ALGO_SHA256;
@@ -2475,19 +2508,10 @@ main (int argc, char **argv)
     opt.command_fd = -1; /* no command fd */
     opt.compress_level = -1; /* defaults to standard compress level */
     opt.bz2_compress_level = -1; /* defaults to standard compress level */
-    /* note: if you change these lines, look at oOpenPGP */
-    opt.def_cipher_algo = 0;
-    opt.def_digest_algo = 0;
-    opt.cert_digest_algo = 0;
-    opt.compress_algo = -1; /* defaults to DEFAULT_COMPRESS_ALGO */
-    opt.s2k_mode = 3; /* iterated+salted */
     opt.s2k_count = 0; /* Auto-calibrate when needed.  */
-    opt.s2k_cipher_algo = DEFAULT_CIPHER_ALGO;
     opt.completes_needed = 1;
     opt.marginals_needed = 3;
     opt.max_cert_depth = 5;
-    opt.escape_from = 1;
-    opt.flags.require_cross_cert = 1;
     opt.import_options = (IMPORT_REPAIR_KEYS
                           | IMPORT_COLLAPSE_UIDS
                           | IMPORT_COLLAPSE_SUBKEYS);
@@ -2499,7 +2523,7 @@ main (int argc, char **argv)
                                             | IMPORT_COLLAPSE_SUBKEYS
                                             | IMPORT_CLEAN);
     opt.keyserver_options.export_options = EXPORT_ATTRIBUTES;
-    opt.keyserver_options.options = 0;
+    opt.keyserver_options.options = KEYSERVER_UPDATE_BEFORE_SEND;
     opt.verify_options = (LIST_SHOW_UID_VALIDITY
                           | VERIFY_SHOW_POLICY_URLS
                           | VERIFY_SHOW_STD_NOTATIONS
@@ -2523,7 +2547,7 @@ main (int argc, char **argv)
     opt.emit_version = 0;
     opt.weak_digests = NULL;
     opt.with_subkey_fingerprint = 1;
-    opt.compliance = CO_GNUPG;
+    set_compliance_option (oGnuPG);
 
     /* Check special options given on the command line.  */
     orig_argc = argc;
@@ -2727,6 +2751,7 @@ main (int argc, char **argv)
 	  case aSign:
 	  case aQuickSignKey:
 	  case aQuickLSignKey:
+	  case aQuickTSignKey:
 	  case aQuickRevSig:
 	  case aSignKey:
 	  case aLSignKey:
@@ -3092,6 +3117,11 @@ main (int argc, char **argv)
 	  case oMinRSALength: opt.min_rsa_length = pargs.r.ret_ulong; break;
           case oRequirePQCEncryption:
             opt.flags.require_pqc_encryption = 1;
+            opt.flags.disable_pqc_encryption = 0;
+            break;
+          case oDisablePQCEncryption:
+            if (!opt.flags.require_pqc_encryption)
+              opt.flags.disable_pqc_encryption = 1;
             break;
 
           case oRFC2440Text: opt.rfc2440_text=1; break;
@@ -3476,7 +3506,9 @@ main (int argc, char **argv)
 		   NULL},
 		  {"show-user-notations",VERIFY_SHOW_USER_NOTATIONS,NULL,
 		   N_("show user-supplied notations during signature verification")},
-		  {"show-keyserver-urls",VERIFY_SHOW_KEYSERVER_URLS,NULL,
+                  {"show-hidden-notations",VERIFY_SHOW_HIDDEN_NOTATIONS,NULL,
+                   NULL},
+                  {"show-keyserver-urls",VERIFY_SHOW_KEYSERVER_URLS,NULL,
 		   N_("show preferred keyserver URLs during signature verification")},
 		  {"show-uid-validity",VERIFY_SHOW_UID_VALIDITY,NULL,
 		   N_("show user ID validity during signature verification")},
@@ -3578,6 +3610,9 @@ main (int argc, char **argv)
 	  case oNoAutoKeyRetrieve:
             opt.keyserver_options.options &= ~KEYSERVER_AUTO_KEY_RETRIEVE;
             break;
+
+          case oAutoKeyUpload: opt.flags.auto_key_upload = 1; break;
+          case oNoAutoKeyUpload: opt.flags.auto_key_upload = 0; break;
 
 	  case oShowOnlySessionKey:
             opt.show_only_session_key = 1;
@@ -4703,7 +4738,25 @@ main (int argc, char **argv)
           sl = NULL;
           for( ; argc; argc--, argv++)
 	    append_to_strlist2 (&sl, *argv, utf8_strings);
-          keyedit_quick_sign (ctrl, fpr, sl, locusr, (cmd == aQuickLSignKey));
+          keyedit_quick_sign (ctrl, fpr, sl, locusr,
+                              NULL, (cmd == aQuickLSignKey));
+          free_strlist (sl);
+        }
+	break;
+
+      case aQuickTSignKey:
+        {
+          const char *fpr, *tsig;
+
+          if (argc < 2)
+            wrong_args ("--quick-tsign-key fingerprint"
+                        " depth,[m|f][,domain] [userids]");
+          fpr = *argv++; argc--;
+          tsig = *argv++; argc--;
+          sl = NULL;
+          for( ; argc; argc--, argv++)
+	    append_to_strlist2 (&sl, *argv, utf8_strings);
+          keyedit_quick_sign (ctrl, fpr, sl, locusr, tsig, 0);
           free_strlist (sl);
         }
 	break;
@@ -4971,7 +5024,7 @@ main (int argc, char **argv)
           const char *x_fpr, *x_expire;
 
           if (argc < 2)
-            wrong_args ("--quick-set-exipre FINGERPRINT EXPIRE [SUBKEY-FPRS]");
+            wrong_args ("--quick-set-expire FINGERPRINT EXPIRE [SUBKEY-FPRS]");
           x_fpr = *argv++; argc--;
           x_expire = *argv++; argc--;
           keyedit_quick_set_expire (ctrl, x_fpr, x_expire, argv);
@@ -5027,9 +5080,9 @@ main (int argc, char **argv)
 	for( ; argc; argc--, argv++ )
 	    append_to_strlist2( &sl, *argv, utf8_strings );
 	if( cmd == aSendKeys )
-            rc = keyserver_export (ctrl, sl );
+          rc = keyserver_export (ctrl, sl, 0 );
 	else if( cmd == aRecvKeys )
-            rc = keyserver_import (ctrl, sl );
+          rc = keyserver_import (ctrl, sl, 0);
 	else
           {
             export_stats_t stats = export_new_stats ();

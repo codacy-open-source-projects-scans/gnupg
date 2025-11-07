@@ -1054,11 +1054,13 @@ radix64_read( armor_filter_context_t *afx, IOBUF a, size_t *retn,
     afx->radbuf[0] = val;
 
     if( n )
-      gcry_md_write (afx->crc_md, buf, n);
+      {
+        gcry_md_write (afx->crc_md, buf, n);
+        afx->any_data = 1;
+      }
 
     if( checkcrc ) {
 	gcry_md_final (afx->crc_md);
-	afx->any_data = 1;
 	afx->inp_checked=0;
 	afx->faked = 0;
 	for(;;) { /* skip lf and pad characters */
@@ -1310,8 +1312,8 @@ armor_filter( void *opaque, int control,
 	n = 0;
 	if( afx->buffer_len ) {
             /* Copy the data from AFX->BUFFER to BUF.  */
-	    for(; n < size && afx->buffer_pos < afx->buffer_len; n++ )
-		buf[n++] = afx->buffer[afx->buffer_pos++];
+            for(; n < size && afx->buffer_pos < afx->buffer_len;)
+                buf[n++] = afx->buffer[afx->buffer_pos++];
 	    if( afx->buffer_pos >= afx->buffer_len )
 		afx->buffer_len = 0;
 	}

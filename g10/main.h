@@ -202,6 +202,7 @@ unsigned int ecdsa_qbits_from_Q (unsigned int qbits);
 void set_status_fd ( int fd );
 int  is_status_enabled ( void );
 void write_status ( int no );
+void write_status_warning (const char *where, gpg_error_t err);
 void write_status_error (const char *where, gpg_error_t err);
 void write_status_errcode (const char *where, int errcode);
 void write_status_failure (const char *where, gpg_error_t err);
@@ -252,7 +253,7 @@ gpg_error_t reencrypt_to_new_recipients (ctrl_t ctrl, int armor,
                                          const char *filename, iobuf_t infp,
                                          strlist_t recipients,
                                          DEK *dek,
-                                         struct pubkey_enc_list *pkenc_list);
+                                         struct seskey_enc_list *sesenc_list);
 int encrypt_filter (void *opaque, int control,
 		    iobuf_t a, byte *buf, size_t *ret_len);
 
@@ -407,6 +408,7 @@ gpg_error_t transfer_secret_keys (ctrl_t ctrl, struct import_stats_s *stats,
 int collapse_uids (kbnode_t *keyblock);
 int collapse_subkeys (kbnode_t *keyblock);
 
+const char *revocation_reason_code_to_str (int code, char **r_freeme);
 int get_revocation_reason (PKT_signature *sig, char **r_reason,
                            char **r_comment, size_t *r_commentlen);
 
@@ -418,6 +420,7 @@ typedef struct export_stats_s *export_stats_t;
 export_stats_t export_new_stats (void);
 void export_release_stats (export_stats_t stats);
 void export_print_stats (export_stats_t stats);
+void print_status_exported (PKT_public_key *pk);
 
 int parse_export_options(char *str,unsigned int *options,int noisy);
 gpg_error_t parse_and_set_export_filter (const char *string);
@@ -487,6 +490,7 @@ void show_preferences (PKT_user_id *uid, int indent, int mode, int verbose);
 void show_policy_url(PKT_signature *sig,int indent,int mode);
 void show_keyserver_url(PKT_signature *sig,int indent,int mode);
 void show_notation(PKT_signature *sig,int indent,int mode,int which);
+void print_matching_notations (PKT_signature *sig);
 void dump_attribs (const PKT_user_id *uid, PKT_public_key *pk);
 void set_attrib_fd(int fd);
 void print_key_info (ctrl_t ctrl, estream_t fp, int indent,
@@ -495,6 +499,7 @@ void print_key_info_log (ctrl_t ctrl, int loglevel, int indent,
                      PKT_public_key *pk, int secret);
 void print_card_key_info (estream_t fp, KBNODE keyblock);
 void print_key_line (ctrl_t ctrl, estream_t fp, PKT_public_key *pk, int secret);
+void print_revocation_reason_comment (const char *comment, size_t comment_len);
 
 /*-- verify.c --*/
 void print_file_status( int status, const char *name, int what );

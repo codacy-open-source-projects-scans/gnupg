@@ -674,7 +674,15 @@ Section "GnuPG" SEC_gnupg
 
   SetOutPath "$INSTDIR\share\gnupg"
   File "share/gnupg/distsigkey.gpg"
-  File "share/gnupg/sks-keyservers.netCA.pem"
+  File /nonfatal "share/gnupg/help.txt"
+  File /nonfatal "share/gnupg/help.de.txt"
+  File /nonfatal "share/gnupg/help.fr.txt"
+  File /nonfatal "share/gnupg/mail-tube.txt"
+  File /nonfatal "share/gnupg/mail-tube.de.txt"
+  File /nonfatal "share/gnupg/mail-tube.fr.txt"
+  File /nonfatal "share/gnupg/wks-utils.txt"
+  File /nonfatal "share/gnupg/wks-utils.de.txt"
+  File /nonfatal "share/gnupg/wks-utils.fr.txt"
 
   SetOutPath "$INSTDIR\share\doc\gnupg\examples"
   File "share/doc/gnupg/examples/pwpattern.list"
@@ -839,18 +847,6 @@ Section "-ksba" SEC_ksba
   File /oname=libksba.imp lib/libksba.dll.a
   SetOutPath "$INSTDIR\include"
   File include/ksba.h
-SectionEnd
-
-Section "-gpgme" SEC_gpgme
-  SetOutPath "$INSTDIR\bin"
-  File bin/libgpgme-11.dll
-  File /nonfatal bin/libgpgme-glib-11.dll
-  File libexec/gpgme-w32spawn.exe
-  SetOutPath "$INSTDIR\lib"
-  File /oname=libgpgme.imp      lib/libgpgme.dll.a
-  File /nonfatal /oname=libgpgme-glib.imp lib/libgpgme-glib.dll.a
-  SetOutPath "$INSTDIR\include"
-  File include/gpgme.h
 SectionEnd
 
 Section "-sqlite" SEC_sqlite
@@ -1225,15 +1221,6 @@ Section "-un.libiconv"
   Delete "$INSTDIR\bin\libiconv-2.dll"
 SectionEnd
 
-Section "-un.gpgme"
-  Delete "$INSTDIR\bin\libgpgme-11.dll"
-  Delete "$INSTDIR\bin\libgpgme-glib-11.dll"
-  Delete "$INSTDIR\bin\gpgme-w32spawn.exe"
-  Delete "$INSTDIR\lib\libgpgme.imp"
-  Delete "$INSTDIR\lib\libgpgme-glib.imp"
-  Delete "$INSTDIR\include\gpgme.h"
-SectionEnd
-
 Section "-un.ksba"
   Delete "$INSTDIR\bin\libksba-8.dll"
   Delete "$INSTDIR\lib\libksba.imp"
@@ -1349,11 +1336,17 @@ Section "-un.gnupg"
   Delete "$INSTDIR\share\doc\gnupg\examples\pwpattern.list"
   RMDir  "$INSTDIR\share\doc\gnupg\examples"
   RMDir  "$INSTDIR\share\doc\gnupg"
+  RMDir  "$INSTDIR\share\doc"
 
-  Delete "$INSTDIR\share\gnupg\sks-keyservers.netCA.pem"
   Delete "$INSTDIR\share\gnupg\dirmngr-conf.skel"
   Delete "$INSTDIR\share\gnupg\distsigkey.gpg"
   Delete "$INSTDIR\share\gnupg\gpg-conf.skel"
+  Delete "$INSTDIR\share\gnupg\help.txt"
+  Delete "$INSTDIR\share\gnupg\help.*.txt"
+  Delete "$INSTDIR\share\gnupg\mail-tube.txt"
+  Delete "$INSTDIR\share\gnupg\mail-tube.*.txt"
+  Delete "$INSTDIR\share\gnupg\wks-utils.txt"
+  Delete "$INSTDIR\share\gnupg\wks-utils.*.txt"
   RMDir  "$INSTDIR\share\gnupg"
 
   Delete "$INSTDIR\share\locale\ca\LC_MESSAGES\gnupg2.mo"

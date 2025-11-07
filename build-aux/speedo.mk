@@ -73,7 +73,7 @@ help:
 	@echo 'Use WIXPREFIX to provide the WIX binaries for the MSI package.'
 	@echo '    Using WIX also requires wine with installed wine mono.'
 	@echo '    See help-wixlib for more information'
-	@echo 'Set W32VERSION=w64 to build a 64 bit Windows version.'
+	@echo 'Set W32VERSION=w32 to build a 32 bit Windows version.'
 
 help-wixlib:
 	@echo 'The buildsystem can create a wixlib to build MSI packages.'
@@ -161,8 +161,8 @@ WHAT=git
 # Set target to "native" or "w32".
 TARGETOS=
 
-# To build a 64 bit Windows version also change this to "w64"
-W32VERSION=w32
+# To build a 32 bit Windows version also change this to "w32"
+W32VERSION=w64
 
 # Set to 1 to use a pre-installed swdb.lst instead of the online version.
 CUSTOM_SWDB=0
@@ -225,7 +225,6 @@ AUTHENTICODE_FILES= \
                     gpg-wks-client.exe        \
                     gpg.exe                   \
                     gpgconf.exe               \
-                    gpgme-w32spawn.exe        \
                     gpgsm.exe                 \
                     gpgtar.exe                \
                     gpgv.exe                  \
@@ -234,7 +233,6 @@ AUTHENTICODE_FILES= \
                     libassuan-9.dll           \
                     libgcrypt-20.dll          \
                     libgpg-error-0.dll        \
-                    libgpgme-11.dll           \
                     libksba-8.dll             \
                     libnpth-0.dll             \
                     libntbtls-0.dll           \
@@ -272,10 +270,6 @@ speedo_spkgs  = \
 	zlib bzip2 sqlite \
         libassuan libksba ntbtls gnupg
 
-ifeq ($(STATIC),0)
-speedo_spkgs += gpgme
-endif
-
 ifeq ($(TARGETOS),w32)
 speedo_spkgs += pinentry
 endif
@@ -297,7 +291,7 @@ endif
 # Packages which use the gnupg autogen.sh build style
 speedo_gnupg_style = \
 	libgpg-error npth libgcrypt  \
-	libassuan libksba ntbtls gnupg gpgme \
+	libassuan libksba ntbtls gnupg \
 	pinentry
 
 # Packages which use only make and no build directory
@@ -351,10 +345,6 @@ ntbtls_ver  := $(shell awk '$$1=="ntbtls_ver" {print $$2}' swdb.lst)
 ntbtls_sha1 := $(shell awk '$$1=="ntbtls_sha1" {print $$2}' swdb.lst)
 ntbtls_sha2 := $(shell awk '$$1=="ntbtls_sha2" {print $$2}' swdb.lst)
 
-gpgme_ver  := $(shell awk '$$1=="gpgme_ver" {print $$2}' swdb.lst)
-gpgme_sha1 := $(shell awk '$$1=="gpgme_sha1" {print $$2}' swdb.lst)
-gpgme_sha2 := $(shell awk '$$1=="gpgme_sha2" {print $$2}' swdb.lst)
-
 pinentry_ver  := $(shell awk '$$1=="pinentry_ver" {print $$2}' swdb.lst)
 pinentry_sha1 := $(shell awk '$$1=="pinentry_sha1" {print $$2}' swdb.lst)
 pinentry_sha2 := $(shell awk '$$1=="pinentry_sha2" {print $$2}' swdb.lst)
@@ -383,7 +373,6 @@ $(info Zlib ...........: $(zlib_ver))
 $(info Bzip2 ..........: $(bzip2_ver))
 $(info SQLite .........: $(sqlite_ver))
 $(info NtbTLS .. ......: $(ntbtls_ver))
-$(info GPGME ..........: $(gpgme_ver))
 $(info Pinentry .......: $(pinentry_ver))
 endif
 
@@ -454,8 +443,6 @@ else ifeq ($(WHAT),git)
   speedo_pkg_libksba_gitref = master
   speedo_pkg_ntbtls_git = $(gitrep)/ntbtls
   speedo_pkg_ntbtls_gitref = master
-  speedo_pkg_gpgme_git = $(gitrep)/gpgme
-  speedo_pkg_gpgme_gitref = master
   speedo_pkg_pinentry_git = $(gitrep)/pinentry
   speedo_pkg_pinentry_gitref = master
 else ifeq ($(WHAT),release)
@@ -471,8 +458,6 @@ else ifeq ($(WHAT),release)
 	$(pkgrep)/libksba/libksba-$(libksba_ver).tar.bz2
   speedo_pkg_ntbtls_tar = \
 	$(pkgrep)/ntbtls/ntbtls-$(ntbtls_ver).tar.bz2
-  speedo_pkg_gpgme_tar = \
-	$(pkgrep)/gpgme/gpgme-$(gpgme_ver).tar.bz2
   speedo_pkg_pinentry_tar = \
 	$(pkgrep)/pinentry/pinentry-$(pinentry_ver).tar.bz2
 else
@@ -535,13 +520,6 @@ define speedo_pkg_gnupg_post_install
     |sed 's/,/./g' >$(idir)/INST_PROD_VERSION )
 endef
 endif
-
-# The LDFLAGS was needed for -lintl for glib.
-speedo_pkg_gpgme_configure = \
-	--disable-static --disable-w32-glib \
-	--with-gpg-error-prefix=$(idir) \
-	LDFLAGS=-L$(idir)/lib
-
 
 speedo_pkg_pinentry_configure += \
         --disable-pinentry-qt5   \
@@ -702,7 +680,7 @@ ifeq ($(TARGETOS),w32)
             --build-w64)
   speedo_host_build_option := --host=$(host) --build=$(build)
   speedo_host_build_option6 := --host=$(host6) --build=$(build)
-  speedo_w32_cflags := -mms-bitfields
+  speedo_w32_cflags := -fcf-protection=full
 else
   speedo_autogen_buildopt :=
   host :=
@@ -1132,10 +1110,10 @@ ifneq ($(TARGETOS),w32)
 	 echo "sysconfdir = /etc/gnupg"  >bin/gpgconf.ctl ;\
 	 echo "rootdir = $(idir)" >>bin/gpgconf.ctl ;\
 	 echo "speedo: /*" ;\
-	 echo "speedo:  * Now copy $(idir)/ to the final location and" ;\
-	 echo "speedo:  * adjust $(idir)/bin/gpgconf.ctl accordingly" ;\
-	 echo "speedo:  * Or run run for example:" ;\
+	 echo "speedo:  * Now run for example:" ;\
 	 echo "speedo:  *   make -f $(topsrc)/build-aux/speedo.mk install SYSROOT=/usr/local/gnupg26" ;\
+	 echo "speedo:  * This copies copy $(idir)/ to the final location and" ;\
+	 echo "speedo:  * adjusts $(idir)/bin/gpgconf.ctl accordingly" ;\
 	 echo "speedo:  */")
 endif
 
@@ -1200,6 +1178,9 @@ clean-speedo:
 # {{{
 ifeq ($(TARGETOS),w32)
 
+# The exclude '*.[ao]' takes care of the zlib and bzip2 peculiarity
+# which keeps the build files in the source directory.  See also the
+# speedo_make_only_style macro.
 dist-source: installer
 	for i in 00 01 02 03; do sleep 1;touch PLAY/stamps/stamp-*-${i}-*;done
 	(set -e;\
@@ -1210,6 +1191,7 @@ dist-source: installer
              --anchored --exclude './PLAY' . ;\
 	 tar --totals -rf "$$tarname" --exclude-backups --exclude-vcs \
               --transform='s,^,$(INST_NAME)-$(INST_VERSION)/,' \
+              --exclude='*.[ao]' \
 	     PLAY/stamps/stamp-*-00-unpack PLAY/src swdb.lst swdb.lst.sig ;\
 	 [ -f "$$tarname".xz ] && rm "$$tarname".xz;\
          xz -T0 "$$tarname" ;\

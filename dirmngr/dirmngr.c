@@ -161,6 +161,7 @@ enum cmd_and_opt_values {
   oListenBacklog,
   oFakeCRL,
   oCompatibilityFlags,
+  oUserAgent,
   aTest
 };
 
@@ -177,7 +178,7 @@ static gpgrt_opt_t opts[] = {
   ARGPARSE_c (aServer,   "server",  N_("run in server mode (foreground)") ),
   ARGPARSE_c (aDaemon,   "daemon",  N_("run in daemon mode (background)") ),
 #ifndef HAVE_W32_SYSTEM
-  ARGPARSE_c (aSupervised,  "supervised", "@"),
+  ARGPARSE_c (aSupervised,  "deprecated-supervised", "@"),
 #endif
   ARGPARSE_c (aListCRLs, "list-crls", N_("list the contents of the CRL cache")),
   ARGPARSE_c (aLoadCRL,  "load-crl", N_("|FILE|load CRL from FILE into cache")),
@@ -251,6 +252,7 @@ static gpgrt_opt_t opts[] = {
                 N_("|URL|redirect all HTTP requests to URL")),
   ARGPARSE_s_n (oHonorHTTPProxy, "honor-http-proxy",
                 N_("use system's HTTP proxy setting")),
+  ARGPARSE_s_s (oUserAgent, "user-agent", "@"),
   ARGPARSE_s_s (oLDAPWrapperProgram, "ldap-wrapper-program", "@"),
 
   ARGPARSE_header ("Keyserver", N_("Configuration for OpenPGP servers")),
@@ -330,6 +332,7 @@ static struct debug_flags_s debug_flags [] =
     { DBG_LOOKUP_VALUE , "lookup"  },
     { DBG_EXTPROG_VALUE, "extprog" },
     { DBG_KEEPTMP_VALUE, "keeptmp" },
+    { DBG_LDAP_VALUE,    "ldap"    },
     { 77, NULL } /* 77 := Do not exit on "help" or "?".  */
   };
 
@@ -695,6 +698,7 @@ parse_rereadable_options (gpgrt_argparse_t *pargs, int reread)
       opt.ocsp_max_period = 90 * 86400;       /* 90 days.  */
       opt.ocsp_current_period = 3 * 60 * 60;  /* 3 hours. */
       opt.max_replies = DEFAULT_MAX_REPLIES;
+      opt.user_agent = "GnuPG/2.6";
       while (opt.ocsp_signer)
         {
           fingerprint_list_t tmp = opt.ocsp_signer->next;
@@ -906,6 +910,15 @@ parse_rereadable_options (gpgrt_argparse_t *pargs, int reread)
         }
       break;
 
+    case oUserAgent:
+      if (strpbrk (pargs->r.ret_str, "\r\n"))
+        ; /* Ignore if the caller tried to insert CR or LF.  */
+      else if (!strcmp (pargs->r.ret_str, "none"))
+        opt.user_agent = "";
+      else
+        opt.user_agent = pargs->r.ret_str;
+      break;
+
     default:
       return 0; /* Not handled. */
     }
@@ -976,21 +989,46 @@ my_ntbtls_log_handler (void *opaque, int level, const char *fmt, va_list argv)
 #endif
 
 
+/* Helper for initialize_modules.  */
 static void
 thread_init (void)
 {
-  npth_init ();
+  static int npth_initialized = 0;
+
+  if (!npth_initialized)
+    {
+      npth_initialized++;
+      npth_init ();
+      /* With nPth running we can set the logging callback.  Our
+       * windows implementation does not yet feature the nPth TLS
+       * functions.  */
+#ifndef HAVE_W32_SYSTEM
+      if (npth_key_create (&my_tlskey_current_fd, NULL) == 0)
+        if (npth_setspecific (my_tlskey_current_fd, NULL) == 0)
+          log_set_pid_suffix_cb (pid_suffix_callback);
+#endif /*!HAVE_W32_SYSTEM*/
+      }
   gpgrt_set_syscall_clamp (npth_unprotect, npth_protect);
 
-  /* Now with NPth running we can set the logging callback.  Our
-     windows implementation does not yet feature the NPth TLS
-     functions.  */
-#ifndef HAVE_W32_SYSTEM
-  if (npth_key_create (&my_tlskey_current_fd, NULL) == 0)
-    if (npth_setspecific (my_tlskey_current_fd, NULL) == 0)
-      log_set_pid_suffix_cb (pid_suffix_callback);
-#endif /*!HAVE_W32_SYSTEM*/
+  /* Now that we have set the syscall clamp we need to tell Libgcrypt
+   * that it should get them from libgpg-error.  Note that Libgcrypt
+   * has already been initialized but at that point nPth was not
+   * initialized and thus Libgcrypt could not set its system call
+   * clamp.  */
+  gcry_control (GCRYCTL_REINIT_SYSCALL_CLAMP, 0, 0);
+  assuan_control (ASSUAN_CONTROL_REINIT_SYSCALL_CLAMP, NULL);
 }
+
+
+static void
+initialize_modules (void)
+{
+  thread_init ();
+  cert_cache_init (hkp_cacert_filenames);
+  crl_cache_init ();
+  ks_hkp_init ();
+}
+
 
 
 int
@@ -1317,12 +1355,9 @@ main (int argc, char **argv)
           log_debug ("... okay\n");
         }
 
-
-      thread_init ();
-      cert_cache_init (hkp_cacert_filenames);
-      crl_cache_init ();
-      ks_hkp_init ();
+      initialize_modules ();
       http_register_netactivity_cb (netactivity_action);
+
       start_command_handler (ASSUAN_INVALID_FD, 0);
       shutdown_reaper ();
     }
@@ -1360,10 +1395,7 @@ main (int argc, char **argv)
       else
         log_set_prefix (NULL, 0);
 
-      thread_init ();
-      cert_cache_init (hkp_cacert_filenames);
-      crl_cache_init ();
-      ks_hkp_init ();
+      initialize_modules ();
       http_register_netactivity_cb (netactivity_action);
       handle_connections (3);
       shutdown_reaper ();
@@ -1459,6 +1491,7 @@ main (int argc, char **argv)
 	log_error (_("error getting nonce for the socket\n"));
       if (rc == -1)
         {
+          log_libassuan_system_error (fd);
           log_error (_("error binding socket to '%s': %s\n"),
                      serv_addr.sun_path,
                      gpg_strerror (gpg_error_from_syserror ()));
@@ -1586,11 +1619,9 @@ main (int argc, char **argv)
             }
         }
 
-      thread_init ();
-      cert_cache_init (hkp_cacert_filenames);
-      crl_cache_init ();
-      ks_hkp_init ();
+      initialize_modules ();
       http_register_netactivity_cb (netactivity_action);
+
       handle_connections (fd);
       shutdown_reaper ();
     }
@@ -1609,10 +1640,8 @@ main (int argc, char **argv)
       memset (&ctrlbuf, 0, sizeof ctrlbuf);
       dirmngr_init_default_ctrl (&ctrlbuf);
 
-      thread_init ();
-      cert_cache_init (hkp_cacert_filenames);
-      crl_cache_init ();
-      ks_hkp_init ();
+      initialize_modules ();
+
       if (!argc)
         rc = crl_cache_load (&ctrlbuf, NULL);
       else
@@ -1633,10 +1662,8 @@ main (int argc, char **argv)
       memset (&ctrlbuf, 0, sizeof ctrlbuf);
       dirmngr_init_default_ctrl (&ctrlbuf);
 
-      thread_init ();
-      cert_cache_init (hkp_cacert_filenames);
-      crl_cache_init ();
-      ks_hkp_init ();
+      initialize_modules ();
+
       rc = crl_fetch (&ctrlbuf, argv[0], &reader);
       if (rc)
         log_error (_("fetching CRL from '%s' failed: %s\n"),
@@ -2484,7 +2511,9 @@ handle_connections (assuan_fd_t listen_fd)
                                    (struct sockaddr *)&paddr, &plen);
 	  if (fd == GNUPG_INVALID_FD)
 	    {
-	      log_error ("accept failed: %s\n", strerror (errno));
+              gpg_error_t myerr = gpg_error_from_syserror ();
+              log_libassuan_system_error (listen_fd);
+	      log_error ("accept failed: %s\n", gpg_strerror (myerr));
 	    }
           else
             {
@@ -2568,7 +2597,10 @@ gpgconf_versions (void)
   const char *s;
   int n;
 
-  /* Unfortunately Npth has no way to get the version.  */
+#if NPTH_VERSION_NUMBER >= 0x010800
+  es_fprintf (es_stdout, "* nPth %s (%s)\n\n",
+              npth_get_version (NULL), npth_get_version ("\x01\x02"));
+#endif /*NPTH_VERSION_NUMBER*/
 
   s = get_revision_from_blurb (assuan_check_version ("\x01\x01"), &n);
   es_fprintf (es_stdout, "* Libassuan %s (%.*s)\n\n",

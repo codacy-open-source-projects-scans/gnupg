@@ -141,6 +141,9 @@ struct
                                runtime option in case we want to check
                                the integrity of the software at
                                runtime. */
+  int no_qes_note;          /* Do not print a note that the software
+                             * has not been approved for creating or
+                             * verifying qualified signatures.  */
 
   unsigned int min_rsa_length;   /* Used for compliance checks.  */
 
@@ -284,6 +287,8 @@ struct server_control_s
    * progress info and to decide on how to allocate buffers.  */
   uint64_t input_size_hint;
 
+  int no_protection;  /* No passphrase for PKCS#12 export.  */
+
   int create_base64;  /* Create base64 encoded output */
   int create_pem;     /* create PEM output */
   const char *pem_name; /* PEM name to use */
@@ -339,6 +344,7 @@ struct rootca_flags_s
   unsigned int relax:1;  /* Relax checking of root certificates.  */
   unsigned int chain_model:1; /* Root requires the use of the chain model.  */
   unsigned int qualified:1;   /* Root CA used for qualified signatures.   */
+  unsigned int noconsent:1;   /* Consent is not required "qualified".     */
   unsigned int de_vs:1;       /* Root CA is de-vs compliant.             */
 };
 
@@ -355,12 +361,14 @@ int  gpgsm_parse_validation_model (const char *model);
 
 /*-- server.c --*/
 void gpgsm_server (certlist_t default_recplist);
+void gpgsm_init_statusfp (ctrl_t ctrl);
 gpg_error_t gpgsm_status (ctrl_t ctrl, int no, const char *text);
 gpg_error_t gpgsm_status2 (ctrl_t ctrl, int no, ...) GPGRT_ATTR_SENTINEL(0);
 gpg_error_t gpgsm_status_with_err_code (ctrl_t ctrl, int no, const char *text,
                                         gpg_err_code_t ec);
 gpg_error_t gpgsm_status_with_error (ctrl_t ctrl, int no, const char *text,
                                      gpg_error_t err);
+void gpgsm_exit_failure_status (void);
 gpg_error_t gpgsm_progress_cb (ctrl_t ctrl, uint64_t current, uint64_t total);
 gpg_error_t gpgsm_proxy_pinentry_notify (ctrl_t ctrl,
                                          const unsigned char *line);
@@ -437,6 +445,12 @@ int gpgsm_validate_chain (ctrl_t ctrl, ksba_cert_t cert,
                           ksba_isotime_t r_exptime,
                           int listmode, estream_t listfp,
                           unsigned int flags, unsigned int *retflags);
+gpg_error_t check_validity_period_cm (ksba_isotime_t current_time,
+                          ksba_isotime_t check_time,
+                          ksba_cert_t subject_cert,
+                          ksba_isotime_t exptime,
+                          int listmode, estream_t listfp, int depth,
+                          int no_log_expired);
 int gpgsm_basic_cert_check (ctrl_t ctrl, ksba_cert_t cert);
 
 /*-- certlist.c --*/
@@ -522,10 +536,11 @@ int gpgsm_scd_pksign (ctrl_t ctrl, const char *keyid, const char *desc,
                       unsigned char *digest, size_t digestlen, int digestalgo,
                       unsigned char **r_buf, size_t *r_buflen);
 int gpgsm_agent_pkdecrypt (ctrl_t ctrl, const char *keygrip, const char *desc,
-                           ksba_const_sexp_t ciphertext,
+                           int use_kem, ksba_const_sexp_t ciphertext,
                            char **r_buf, size_t *r_buflen);
-int gpgsm_agent_genkey (ctrl_t ctrl,
-                        ksba_const_sexp_t keyparms, ksba_sexp_t *r_pubkey);
+gpg_error_t gpgsm_agent_genkey (ctrl_t ctrl, int no_protection,
+                                ksba_const_sexp_t keyparms,
+                                ksba_sexp_t *r_pubkey);
 int gpgsm_agent_readkey (ctrl_t ctrl, int fromcard, const char *hexkeygrip,
                          ksba_sexp_t *r_pubkey);
 int gpgsm_agent_scd_serialno (ctrl_t ctrl, char **r_serialno);
@@ -534,7 +549,7 @@ int gpgsm_agent_istrusted (ctrl_t ctrl, ksba_cert_t cert, const char *hexfpr,
                            struct rootca_flags_s *rootca_flags);
 int gpgsm_agent_havekey (ctrl_t ctrl, const char *hexkeygrip);
 int gpgsm_agent_marktrusted (ctrl_t ctrl, ksba_cert_t cert);
-int gpgsm_agent_learn (ctrl_t ctrl);
+int gpgsm_agent_learn (ctrl_t ctrl, const char *serialno);
 int gpgsm_agent_passwd (ctrl_t ctrl, const char *hexkeygrip, const char *desc);
 gpg_error_t gpgsm_agent_get_confirmation (ctrl_t ctrl, const char *desc);
 gpg_error_t gpgsm_agent_send_nop (ctrl_t ctrl);
@@ -566,7 +581,6 @@ int gpgsm_dirmngr_run_command (ctrl_t ctrl, const char *command,
 
 /*-- misc.c --*/
 void gpgsm_print_further_info (const char *format, ...) GPGRT_ATTR_PRINTF(1,2);
-void setup_pinentry_env (void);
 gpg_error_t transform_sigval (const unsigned char *sigval, size_t sigvallen,
                               int mdalgo,
                               unsigned char **r_newsigval,

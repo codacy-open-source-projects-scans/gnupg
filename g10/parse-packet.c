@@ -1376,8 +1376,7 @@ parse_symkeyenc (IOBUF inp, int pkttype, unsigned long pktlen,
       goto leave;
     }
   seskeylen = pktlen - minlen;
-  k = packet->pkt.symkey_enc = xmalloc_clear (sizeof *packet->pkt.symkey_enc
-					      + seskeylen - 1);
+  k = packet->pkt.symkey_enc = xmalloc_clear (sizeof *packet->pkt.symkey_enc);
   k->version = version;
   k->cipher_algo = cipher_algo;
   k->aead_algo = aead_algo;
@@ -1396,6 +1395,7 @@ parse_symkeyenc (IOBUF inp, int pkttype, unsigned long pktlen,
   k->seskeylen = seskeylen;
   if (k->seskeylen)
     {
+      k->seskey = xcalloc (1, seskeylen);
       for (i = 0; i < seskeylen && pktlen; i++, pktlen--)
 	k->seskey[i] = iobuf_get_noeof (inp);
 
@@ -2281,12 +2281,12 @@ parse_signature (IOBUF inp, int pkttype, unsigned long pktlen,
       pktlen -= 2;  /* Length of hashed data. */
       if (pktlen < n)
 	goto underflow;
-      if (n > 10000)
+      if (n > 30000)
 	{
-	  log_error ("signature packet: hashed data too long\n");
+	  log_error ("signature packet: hashed data too long (%u)\n", n);
           if (list_mode)
-            es_fputs (":signature packet: [hashed data too long]\n", listfp);
-	  rc = GPG_ERR_INV_PACKET;
+            es_fprintf (listfp,
+                        ":signature packet: [hashed data too long (%u)]\n", n);
 	  goto leave;
 	}
       if (n)
@@ -2313,10 +2313,11 @@ parse_signature (IOBUF inp, int pkttype, unsigned long pktlen,
 	goto underflow;
       if (n > 10000)
 	{
-	  log_error ("signature packet: unhashed data too long\n");
+	  log_error ("signature packet: unhashed data too long (%u)\n", n);
           if (list_mode)
-            es_fputs (":signature packet: [unhashed data too long]\n", listfp);
-	  rc = GPG_ERR_INV_PACKET;
+            es_fprintf (listfp,
+                        ":signature packet: [unhashed data too long (%u)]\n",
+                        n);
 	  goto leave;
 	}
       if (n)
@@ -2767,7 +2768,14 @@ parse_key (IOBUF inp, int pkttype, unsigned long pktlen,
             }
           if (err)
             goto leave;
-          if (list_mode)
+        }
+      if (list_mode)
+        {  /* Again so that we have all parameters in pkey[] and can
+            * do a look forward.  We use a hack for Kyber because the
+            * commonly used function pubkey_string requires an extra
+            * buffer and, more important, its result depends on an
+            * configure option.  */
+          for (i = 0; i < npkey; i++)
             {
               es_fprintf (listfp, "\tpkey[%d]: ", i);
               mpi_print (listfp, pk->pkey[i], mpi_print_mode);
@@ -2777,8 +2785,13 @@ parse_key (IOBUF inp, int pkttype, unsigned long pktlen,
                    || algorithm == PUBKEY_ALGO_KYBER) && i==0)
                 {
                   char *curve = openpgp_oid_to_str (pk->pkey[0]);
-                  const char *name = openpgp_oid_to_curve (curve, 0);
-                  es_fprintf (listfp, " %s (%s)", name?name:"", curve);
+                  const char *name = openpgp_oid_to_curve (curve, 2);
+
+                  if (algorithm == PUBKEY_ALGO_KYBER)
+                    es_fprintf (listfp, " ky%u_%s (%s)",
+                                nbits_from_pk (pk), name?name:"", curve);
+                  else
+                    es_fprintf (listfp, " %s (%s)", name?name:"", curve);
                   xfree (curve);
                 }
               es_putc ('\n', listfp);

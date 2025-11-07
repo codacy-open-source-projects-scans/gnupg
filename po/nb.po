@@ -538,6 +538,11 @@ msgstr ""
 msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "en gpg-agent kjører allerede. Lar være å starte en ny\n"
 
+#, fuzzy, c-format
+#| msgid "key %s: removed multiple subkey binding\n"
+msgid "socket file removed - retrying binding\n"
+msgstr "nøkkel %s: fjernet flere undernøkkelbindinger\n"
+
 #, c-format
 msgid "error getting nonce for the socket\n"
 msgstr "feil under henting av sokkel-anledning\n"
@@ -767,6 +772,11 @@ msgstr "Endre passordfrase"
 
 msgid "I'll change it later"
 msgstr "Jeg endrer senere"
+
+#, fuzzy, c-format
+#| msgid "receiving line failed: %s\n"
+msgid "Unprotecting key failed: %s\n"
+msgstr "linjemottak mislyktes: %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr "Sett inn kort med serienummer"
@@ -1411,6 +1421,16 @@ msgstr "tvunget"
 msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr ""
 
+#, c-format
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+"PIN-koder fra fabrikk:\n"
+"   PIN = «%s»     Admin-PIN = «%s»\n"
+"Du bør endre disse med kommandoen «--change-pin»\n"
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr "Feil: Bare ren ASCII er foreløpig tillatt.\n"
 
@@ -1578,16 +1598,6 @@ msgstr "MERK: det ligger allerede nøkler på kortet.\n"
 msgid "Replace existing keys? (y/N) "
 msgstr "Erstatte eksisterende nøkler? (j/N) "
 
-#, c-format
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-"PIN-koder fra fabrikk:\n"
-"   PIN = «%s»     Admin-PIN = «%s»\n"
-"Du bør endre disse med kommandoen «--change-pin»\n"
-
 msgid "Please select the type of key to generate:\n"
 msgstr "Velg hvilken type nøkkel du vil lage:\n"
 
@@ -1716,7 +1726,7 @@ msgstr "Ugyldig kommando  (prøv «help»)\n"
 
 #, fuzzy, c-format
 #| msgid "key operation not possible: %s\n"
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "klarte ikke å utføre nøkkelhandling: %s\n"
 
 #, fuzzy
@@ -1876,6 +1886,11 @@ msgstr "Antall mottakere"
 #, c-format
 msgid "option '%s' may not be used in %s mode\n"
 msgstr "du kan ikke bruke valget «%s» i %s-modus\n"
+
+#, fuzzy, c-format
+#| msgid "can't encrypt to '%s'\n"
+msgid "already encrypted to %08lX\n"
+msgstr "klarte ikke å kryptere til «%s»\n"
 
 #, fuzzy, c-format
 #| msgid "%s encrypted data\n"
@@ -2066,6 +2081,11 @@ msgstr "hurtigsigner nøkkel"
 
 msgid "quickly sign a key locally"
 msgstr "hurtigsigner nøkkel lokalt"
+
+#, fuzzy
+#| msgid "sign selected user IDs with a trust signature"
+msgid "quickly sign a key with a trust signature"
+msgstr "signer valgte bruker-id-er med tillitssignatur"
 
 #, fuzzy
 #| msgid "quickly revoke a user-id"
@@ -2376,6 +2396,11 @@ msgstr "vis innstillinger (avansert)"
 #| msgid "change the ownertrust"
 msgid "show ownertrust"
 msgstr "endre eiertillit"
+
+#, fuzzy
+#| msgid "Critical signature notation: "
+msgid "show trust signature information"
+msgstr "Kritisk signaturnotat: "
 
 #, c-format
 msgid "unknown TOFU policy '%s'\n"
@@ -2710,6 +2735,9 @@ msgstr "|FD|skrive statusinfo til denne FD"
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr "|ALGO|avvis signaturer som er laget med valgt ALGOritme"
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr ""
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "Bruk: gpgv [valg] [filer] (-h for hjelp)"
 
@@ -2772,6 +2800,11 @@ msgstr "forvent GnuPG-format på sikkerhetskopierte nøkler"
 
 msgid "repair keys on import"
 msgstr "reparer nøkler under importering"
+
+#, fuzzy
+#| msgid "list secret keys"
+msgid "do not import secret keys"
+msgstr "vis hemmelige nøkler"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -3039,10 +3072,6 @@ msgstr "Bruker-ID er ikke lenger gyldig"
 #, c-format
 msgid "reason for revocation: "
 msgstr "grunnen for opphevelse: "
-
-#, c-format
-msgid "revocation comment: "
-msgstr "kommentar til opphevelse: "
 
 #, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -3739,6 +3768,11 @@ msgstr "Ingen treff på bruker-id-er."
 msgid "Nothing to sign.\n"
 msgstr "Ingenting å signere.\n"
 
+#, fuzzy, c-format
+#| msgid "checking created signature failed: %s\n"
+msgid "creating key signature failed: %s\n"
+msgstr "kontroll av opprettet signatur mislyktes: %s\n"
+
 #, c-format
 msgid "Not signed by you.\n"
 msgstr "Ikke signert av deg.\n"
@@ -4283,6 +4317,11 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) Nøkkel fra kort\n"
 
 #, fuzzy, c-format
+#| msgid "   (%d) ECC and ECC\n"
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "   (%d) ECC og ECC\n"
+
+#, fuzzy, c-format
 #| msgid "  (%d) ECC (encrypt only)\n"
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) ECC (kun kryptering)\n"
@@ -4326,6 +4365,11 @@ msgstr "Forespurt nøkkelstørrelse er %u bit\n"
 
 msgid "Please select which elliptic curve you want:\n"
 msgstr "Velg elliptisk kurve:\n"
+
+#, fuzzy, c-format
+#| msgid "Please select what kind of key you want:\n"
+msgid "Please select the %s variant you want:\n"
+msgstr "Velg hvilken type nøkkel du vil ha:\n"
 
 msgid ""
 "Please specify how long the key should be valid.\n"
@@ -4550,6 +4594,12 @@ msgstr "klarte ikke å lage sikkerhetskopifila «%s»: %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "Merk: sikkerhetskopi av kortnøkkel lagret på «%s»\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+
 #, c-format
 msgid "writing public key to '%s'\n"
 msgstr "skriver offentlig nøkkel til «%s»\n"
@@ -4659,6 +4709,10 @@ msgstr[1] "Advarsel: hoppet over %lu nøkler pga. for høy størrelse\n"
 msgid "Keyring"
 msgstr "Nøkkelknippe"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "kommentar til opphevelse: "
+
 msgid "Revocable by: "
 msgstr ""
 
@@ -4730,6 +4784,9 @@ msgstr "hent nøkler automatisk ved bekreftelse av signaturer"
 msgid "honor the preferred keyserver URL set on the key"
 msgstr "bruk nøklers foretrukne nøkkeltjener-adresse"
 
+msgid "update a key before sending it"
+msgstr ""
+
 msgid "disabled"
 msgstr "ikke i bruk"
 
@@ -4743,6 +4800,11 @@ msgstr "ugyldig nøkkeltjener-protokoll (us %d!=håndteringsprogram %d)\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr "«%s» er ikke en nøkkel-ID, og blir hoppet over\n"
+
+#, fuzzy, c-format
+#| msgid "\"%s\" is not a fingerprint\n"
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "«%s» er ikke et fingeravtrykk\n"
 
 #, c-format
 msgid "refreshing %d key from %s\n"
@@ -4769,6 +4831,10 @@ msgstr "ber om nøkkelen %s fra %s\n"
 #, c-format
 msgid "no keyserver known\n"
 msgstr "ingen kjent nøkkeltjener\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr ""
 
 #, c-format
 msgid "skipped \"%s\": %s\n"
@@ -5095,6 +5161,11 @@ msgstr "ukomprimert|ingen"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "denne meldinga kan kanskje ikke brukes av %s\n"
+
+#, fuzzy
+#| msgid "enable key"
+msgid "enabled"
+msgstr "ta nøkkel i bruk"
 
 #, c-format
 msgid "ambiguous option '%s'\n"
@@ -5596,6 +5667,11 @@ msgstr "nøkkel %s egner seg ikke for dekryptering i %s-modus\n"
 #, c-format
 msgid "okay, we are the anonymous recipient.\n"
 msgstr "ok, det er du som er den anonyme mottakeren.\n"
+
+#, fuzzy, c-format
+#| msgid "WARNING: signing subkey %s is not cross-certified\n"
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr "ADVARSEL: undernøkkel %s for signering er ikke kryssertifisert\n"
 
 #, c-format
 msgid "old encoding of the DEK is not supported\n"
@@ -6453,13 +6529,19 @@ msgid_plural " (%d validity counts cleared)\n"
 msgstr[0] "(%d gyldighetsantall klarert)\n"
 msgstr[1] "(%d gyldighetsantall klarert)\n"
 
-#, c-format
-msgid "no ultimately trusted keys found\n"
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s not found\n"
+msgstr "fant ingen nøkler med absolutt («ultimat») pålitelighet\n"
+
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s expired\n"
 msgstr "fant ingen nøkler med absolutt («ultimat») pålitelighet\n"
 
 #, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr "fant ikke offentlig nøkkel for absolutt pålitelig nøkkel %s\n"
+msgid "no ultimately trusted keys found\n"
+msgstr "fant ingen nøkler med absolutt («ultimat») pålitelighet\n"
 
 #, c-format
 msgid ""
@@ -7607,9 +7689,10 @@ msgstr "feil under lagring av valg: %s\n"
 msgid "Error - "
 msgstr "Feil - "
 
-#, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr "GPG_TTY har ingen verdi. Bruker forvalgt verdi som kan være ugyldig\n"
+#, fuzzy, c-format
+#| msgid "error writing to stdout: %s\n"
+msgid "error writing to output: %s\n"
+msgstr "feil under skriving til std.utkanal: %s\n"
 
 #, c-format
 msgid "invalid formatted fingerprint in '%s', line %d\n"
@@ -9091,6 +9174,15 @@ msgid "manage the command history"
 msgstr ""
 
 #, c-format
+#~ msgid "GPG_TTY has not been set - using maybe bogus default\n"
+#~ msgstr ""
+#~ "GPG_TTY har ingen verdi. Bruker forvalgt verdi som kan være ugyldig\n"
+
+#, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr "fant ikke offentlig nøkkel for absolutt pålitelig nøkkel %s\n"
+
+#, c-format
 #~ msgid "waiting for process %d to terminate failed: %s\n"
 #~ msgstr "prosess %d avsluttet ikke i tide: %s\n"
 
@@ -9392,9 +9484,6 @@ msgstr ""
 
 #~ msgid "elevate the trust of signatures with valid PKA data"
 #~ msgstr "øk tillitsnivå for signaturer med gyldige PKA-data"
-
-#~ msgid "   (%d) ECC and ECC\n"
-#~ msgstr "   (%d) ECC og ECC\n"
 
 #~ msgid "honor the PKA record set on a key when retrieving keys"
 #~ msgstr "bruk nøklers PKA-oppføring når du henter dem"

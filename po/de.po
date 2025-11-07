@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gnupg-2.4.1\n"
 "Report-Msgid-Bugs-To: translations@gnupg.org\n"
-"PO-Revision-Date: 2024-09-11 14:29+0200\n"
+"PO-Revision-Date: 2025-10-21 11:27+0200\n"
 "Last-Translator: Werner Koch <wk@gnupg.org>\n"
 "Language-Team: German\n"
 "Language: de\n"
@@ -528,6 +528,10 @@ msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "Ein gpg-agent läuft bereits - ein weiterer wird nicht gestartet\n"
 
 #, c-format
+msgid "socket file removed - retrying binding\n"
+msgstr "Datei des Sockets gelöscht - versuche erneut zu binden\n"
+
+#, c-format
 msgid "error getting nonce for the socket\n"
 msgstr "Fehler beim Ermitteln der \"Nonce\" dieses Sockets\n"
 
@@ -711,9 +715,7 @@ msgid ""
 "Do you ultimately trust%%0A  \"%s\"%%0Ato correctly certify user "
 "certificates?"
 msgstr ""
-"Wenn Sie vollständiges Vertrauen haben, daß%%0A  "
-"\"%s\"%%0ABenutzerzertifikate verläßlich zertifiziert, so antworten Sie mit "
-"\"Ja\"."
+"Vertrauen Sie darauf, daß%%0A  \"%s\"%%0AZertifikate korrekt ausstellt?"
 
 msgid "Yes"
 msgstr "Ja"
@@ -765,6 +767,10 @@ msgstr "Das Passwort ändern"
 
 msgid "I'll change it later"
 msgstr "Ich werde sie später ändern"
+
+#, c-format
+msgid "Unprotecting key failed: %s\n"
+msgstr "Entfernen des Schutzes eines Schlüssels schlug fehl: %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr "Bitte legen Sie die Karte mit der folgenden Seriennummer ein"
@@ -1400,6 +1406,16 @@ msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr ""
 "Falls das Listing nicht korrekt erscheint, geben Sie bitte \"%s\" ein\n"
 
+#, c-format
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+"Bitte beachten: Die Werkseinstellung der PINs sind\n"
+"   PIN = '%s'     Admin-PIN = '%s'\n"
+"Sie sollten sie mittels des Befehls --change-pin ändern\n"
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr "Fehler: Nur reines ASCII ist derzeit erlaubt.\n"
 
@@ -1558,16 +1574,6 @@ msgstr "Hinweis: Auf der Karte sind bereits Schlüssel gespeichert!\n"
 msgid "Replace existing keys? (y/N) "
 msgstr "Vorhandene Schlüssel ersetzen? (j/N) "
 
-#, c-format
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-"Bitte beachten: Die Werkseinstellung der PINs sind\n"
-"   PIN = '%s'     Admin-PIN = '%s'\n"
-"Sie sollten sie mittels des Befehls --change-pin ändern\n"
-
 msgid "Please select the type of key to generate:\n"
 msgstr "Bitte wählen Sie die Art des Schlüssel, der erzeugt werden soll:\n"
 
@@ -1687,7 +1693,7 @@ msgid "Invalid command  (try \"help\")\n"
 msgstr "Ungültiger Befehl (versuchen Sie's mal mit \"help\")\n"
 
 #, c-format
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "Änderung der Empfänger ist nicht möglich: %s\n"
 
 msgid "decryption failed"
@@ -1852,6 +1858,10 @@ msgstr "Anzahl der entfernten Empfänger: %u\n"
 #, c-format
 msgid "option '%s' may not be used in %s mode\n"
 msgstr "Die Benutzung der Option \"%s\" ist im %s-Modus nicht erlaubt.\n"
+
+#, c-format
+msgid "already encrypted to %08lX\n"
+msgstr "Verschlüsselung an %08lX ist bereits vorhanden\n"
 
 #, c-format
 msgid "%s encrypted data\n"
@@ -2040,6 +2050,9 @@ msgstr "Schlüssel schnell signieren"
 
 msgid "quickly sign a key locally"
 msgstr "Schlüssel schnell nur für diesen Rechner signieren"
+
+msgid "quickly sign a key with a trust signature"
+msgstr "Schnell eine User-ID mit einer \"Trust\"-Signatur beglaubigen"
 
 msgid "quickly revoke a key signature"
 msgstr "Schnell eine Schlüsselsignatur widerrufen"
@@ -2342,6 +2355,9 @@ msgstr "Voreinstellungen anzeigen"
 
 msgid "show ownertrust"
 msgstr "Den \"Ownertrust\" anzeigen"
+
+msgid "show trust signature information"
+msgstr "Zeige \"Trust\"-Signatur Informationen"
 
 #, c-format
 msgid "unknown TOFU policy '%s'\n"
@@ -2681,6 +2697,9 @@ msgstr "|FD|Statusinfo auf FD (Dateihandle) ausgeben"
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr "|ALGO|Weise mit ALGO erstellte Signaturen zurück"
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr "|NAME|Gebe die \"Notation\" NAME auf stdout aus"
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "Aufruf: gpgv [Optionen] [Dateien] (-h für Hilfe)"
 
@@ -2739,6 +2758,9 @@ msgstr "Eingabedaten sind im GnuPG Datensicherungsformat für Schlüssel"
 
 msgid "repair keys on import"
 msgstr "Schlüssel beim Import reparieren"
+
+msgid "do not import secret keys"
+msgstr "Geheime Schlüssel nicht importieren"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -3009,10 +3031,6 @@ msgstr "User-ID ist nicht mehr gültig"
 #, c-format
 msgid "reason for revocation: "
 msgstr "Grund für Widerruf: "
-
-#, c-format
-msgid "revocation comment: "
-msgstr "Widerruf-Bemerkung: "
 
 #, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -3719,6 +3737,10 @@ msgid "Nothing to sign.\n"
 msgstr "Nichts zu beglaubigen\n"
 
 #, c-format
+msgid "creating key signature failed: %s\n"
+msgstr "Fehler beim Erzeugen einer Schlüsselsignatur: %s\n"
+
+#, c-format
 msgid "Not signed by you.\n"
 msgstr "Nicht von Ihnen signiert.\n"
 
@@ -4244,6 +4266,10 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) Vorhandener Schlüssel auf der Karte%s\n"
 
 #, c-format
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "  (%d) ECC und Kyber%s\n"
+
+#, c-format
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) Kyber (nur verschlüsseln)%s\n"
 
@@ -4286,6 +4312,10 @@ msgstr "Die verlangte Schlüssellänge beträgt %u Bit\n"
 
 msgid "Please select which elliptic curve you want:\n"
 msgstr "Bitte wählen Sie, welche elliptische Kurve Sie möchten:\n"
+
+#, c-format
+msgid "Please select the %s variant you want:\n"
+msgstr "Bitte wählen Sie, welche Art von %s Schlüssel Sie möchten:\n"
 
 msgid ""
 "Please specify how long the key should be valid.\n"
@@ -4509,6 +4539,17 @@ msgstr "Sicherungsdatei '%s' kann nicht erzeugt werden: %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "Hinweis: Sicherung des Kartenschlüssels wurde auf `%s' gespeichert\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+"WARNUNG: Obgleich der Schlüssel auf die Karte geschrieben wurde konnte\n"
+"         keine Sicherungskopie auf die Festplatte geschrieben werden.\n"
+"         Sie sollten entweder den gesamten Vorgang wiederholen oder\n"
+"         lediglich einen neuen Verschlüsselungssschlüssel für die\n"
+"         Karte erzeugen.\n"
+
 #, c-format
 msgid "writing public key to '%s'\n"
 msgstr "schreiben des öffentlichen Schlüssels nach '%s'\n"
@@ -4617,6 +4658,10 @@ msgstr[1] "WARNUNG: %lu Schlüssel übersprungen, da sie zu groß sind\n"
 msgid "Keyring"
 msgstr "Schlüsselbund"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "Widerruf-Bemerkung: "
+
 msgid "Revocable by: "
 msgstr "Widerrufbar durch: "
 
@@ -4689,6 +4734,9 @@ msgid "honor the preferred keyserver URL set on the key"
 msgstr ""
 "Die im Schlüssel enthaltene bevorzugte URL für Schlüsselserver beachten"
 
+msgid "update a key before sending it"
+msgstr "Schlüssel for dem senden aktualisieren"
+
 msgid "disabled"
 msgstr "abgeschaltet"
 
@@ -4702,6 +4750,10 @@ msgstr "Ungültiges Schlüsselserverprotokoll (wir %d!=Handhabungsroutine %d)\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr "\"%s\" ist keine Schlüssel-ID: überspringe\n"
+
+#, c-format
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "\"%s\" ist kein Fingerabdruck: wird übersprungen\n"
 
 #, c-format
 msgid "refreshing %d key from %s\n"
@@ -4728,6 +4780,10 @@ msgstr "fordere Schlüssel %s von %s an\n"
 #, c-format
 msgid "no keyserver known\n"
 msgstr "Kein Schlüsselserver bekannt\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr "\"Upload\" wurde übersprungen da es kein LDAP Keyserver ist\n"
 
 #, c-format
 msgid "skipped \"%s\": %s\n"
@@ -5064,6 +5120,9 @@ msgstr "unkomprimiert|kein|keine"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "Diese Botschaft könnte für %s unbrauchbar sein\n"
+
+msgid "enabled"
+msgstr "eingeschaltet"
 
 #, c-format
 msgid "ambiguous option '%s'\n"
@@ -5578,6 +5637,10 @@ msgstr "Der Schlüssel ist zum Entschlüsseln nicht gekennzeichnet.\n"
 #, c-format
 msgid "okay, we are the anonymous recipient.\n"
 msgstr "Alles klar, wir sind der ungenannte Empfänger.\n"
+
+#, c-format
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr "WARNUNG: Der Sitzungsschlüssel ist nicht quantenresistent\n"
 
 #, c-format
 msgid "old encoding of the DEK is not supported\n"
@@ -6482,12 +6545,17 @@ msgstr[0] " (%d Validity Zähler gelöscht)\n"
 msgstr[1] " (%d Validity Zähler gelöscht)\n"
 
 #, c-format
-msgid "no ultimately trusted keys found\n"
-msgstr "keine ultimativ vertrauenswürdigen Schlüssel gefunden\n"
+msgid "Note: ultimately trusted key %s not found\n"
+msgstr ""
+"Hinweis: Der ultimativ vertrauenswürdige Schlüssel %s wurde nicht gefunden\n"
 
 #, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr "öff. Schlüssel des ultimativ vertrauten Schlüssel %s nicht gefunden\n"
+msgid "Note: ultimately trusted key %s expired\n"
+msgstr "Hinweis: Der ultimativ vertrauenswürdige Schlüssel %s ist abgelaufen\n"
+
+#, c-format
+msgid "no ultimately trusted keys found\n"
+msgstr "keine ultimativ vertrauenswürdigen Schlüssel gefunden\n"
 
 #, c-format
 msgid ""
@@ -7641,10 +7709,8 @@ msgid "Error - "
 msgstr "Fehler - "
 
 #, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr ""
-"GPG_TTY wurde nicht gesetzt - ein (möglicherweise falscher) Standardwert "
-"wird deshalb verwendet\n"
+msgid "error writing to output: %s\n"
+msgstr "Fehler beim Schreiben auf die Ausgabe: %s\n"
 
 #, c-format
 msgid "invalid formatted fingerprint in '%s', line %d\n"
@@ -9139,6 +9205,17 @@ msgid "manage the command history"
 msgstr "Verwaltung der Kommandohistorie"
 
 #, c-format
+#~ msgid "GPG_TTY has not been set - using maybe bogus default\n"
+#~ msgstr ""
+#~ "GPG_TTY wurde nicht gesetzt - ein (möglicherweise falscher) Standardwert "
+#~ "wird deshalb verwendet\n"
+
+#, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr ""
+#~ "öff. Schlüssel des ultimativ vertrauten Schlüssel %s nicht gefunden\n"
+
+#, c-format
 #~ msgid "waiting for process %d to terminate failed: %s\n"
 #~ msgstr "Das Warten auf die Beendigung des Prozesses %d schlug fehl: %s\n"
 
@@ -9453,9 +9530,6 @@ msgstr "Verwaltung der Kommandohistorie"
 
 #~ msgid "elevate the trust of signatures with valid PKA data"
 #~ msgstr "Werte das Vertrauen zu Signaturen durch gültige PKA-Daten auf"
-
-#~ msgid "   (%d) ECC and ECC\n"
-#~ msgstr "   (%d) ECC und ECC\n"
 
 #~ msgid "honor the PKA record set on a key when retrieving keys"
 #~ msgstr "Die im Schlüssel enthaltenen PKA-Daten beim Schlüsselholen beachten"

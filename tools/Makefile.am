@@ -28,7 +28,7 @@ EXTRA_DIST = \
 	gpg-wks-client-w32info.rc    gpg-wks-client.w32-manifest.in \
 	gpg-card-w32info.rc          gpg-card.w32-manifest.in
 
-AM_CPPFLAGS =
+AM_CPPFLAGS = -DREGEXP_PREFIX=gnupg_
 include $(top_srcdir)/am/cmacros.am
 
 if HAVE_W32_SYSTEM
@@ -49,6 +49,12 @@ gpg-check-pattern-w32info.o  : gpg-check-pattern.w32-manifest \
 gpg-wks-client-w32info.o     : gpg-wks-client.w32-manifest \
                                                      ../common/w32info-rc.h
 
+endif
+
+if DISABLE_TESTS
+TESTS =
+else
+TESTS = $(module_tests)
 endif
 
 AM_CFLAGS = $(LIBGCRYPT_CFLAGS) $(GPG_ERROR_CFLAGS) $(LIBASSUAN_CFLAGS)
@@ -76,7 +82,7 @@ if !HAVE_W32_SYSTEM
 libexec_PROGRAMS += gpg-auth
 endif
 
-noinst_PROGRAMS = clean-sat make-dns-cert
+noinst_PROGRAMS = clean-sat make-dns-cert $(module_tests)
 
 if BUILD_GPGTAR
   bin_PROGRAMS += gpgtar
@@ -215,6 +221,24 @@ gpg_auth_LDADD = $(common_libs) \
 	         $(LIBASSUAN_LIBS) $(LIBGCRYPT_LIBS) \
                  $(GPG_ERROR_LIBS) \
                  $(LIBINTL) $(NETLIBS) $(LIBICONV)
+
+#
+# Module tests
+#
+module_tests = t-mime-maker
+
+t_extra_src =
+t_common_cflags = $(LIBGCRYPT_CFLAGS) $(GPG_ERROR_CFLAGS) $(INCICONV)
+t_common_ldadd  = $(libcommon) \
+		  $(LIBGCRYPT_LIBS) $(GPG_ERROR_LIBS) \
+                  $(LIBINTL) $(LIBICONV) $(W32SOCKLIBS)
+
+t_mime_maker_SOURCES = t-mime-maker.c \
+		       rfc822parse.c rfc822parse.h \
+		       mime-maker.c mime-maker.h $(t_extra_src)
+t_mime_maker_LDADD = $(t_common_ldadd)
+
+
 
 # Instead of a symlink we install a simple wrapper script for the new
 # gpg-wks-client location.  We assume bin is a sibling of libexec.

@@ -53,9 +53,9 @@
 
 /* The time we wait until the agent or the dirmngr are ready for
    operation after we started them before giving up.  */
-#define SECS_TO_WAIT_FOR_AGENT 5
-#define SECS_TO_WAIT_FOR_KEYBOXD 5
-#define SECS_TO_WAIT_FOR_DIRMNGR 5
+#define SECS_TO_WAIT_FOR_AGENT 8
+#define SECS_TO_WAIT_FOR_KEYBOXD 8
+#define SECS_TO_WAIT_FOR_DIRMNGR 8
 
 /* A bitfield that specifies the assuan categories to log.  This is
    identical to the default log handler of libassuan.  We need to do
@@ -125,6 +125,21 @@ set_libassuan_log_cats (unsigned int newcats)
     log_cats = newcats;
   else /* Default to log the control channel.  */
     log_cats = (1 << (ASSUAN_LOG_CONTROL - 1));
+}
+
+
+/* Get the last Windows error from an Assuan socket function and print
+ * the raw error code using log_info.  */
+void
+log_libassuan_system_error (assuan_fd_t fd)
+{
+  int w32err = 0;
+
+  if (assuan_sock_get_flag (fd, "w32_error", &w32err))
+    w32err = -1;  /* Old Libassuan or not Windows.  */
+
+  if (w32err != -1)
+    log_info ("system error code: %d (0x%x)\n", w32err, w32err);
 }
 
 
@@ -521,6 +536,12 @@ start_new_service (assuan_context_t *r_ctx,
           && assuan_socket_connect (ctx, sockname, 0, connect_flags))
         {
 #ifdef HAVE_W32_SYSTEM
+          /* On Windows we remove the socketname before creating it.
+           * This is so that we can wait for a client which is
+           * currently trying to connect.  The 10000 will make the
+           * remove function wait up to 10 seconds for sharing
+           * violation to go away.  */
+          gnupg_remove_ext (sockname, 10000);
           err = gpgrt_process_spawn (program? program : program_name, argv,
                                      GPGRT_PROCESS_DETACHED, NULL, NULL);
 #else /*!W32*/

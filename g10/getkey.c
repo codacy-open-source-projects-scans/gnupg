@@ -79,7 +79,8 @@ struct getkey_ctx_s
   /* Part of the search criteria: The type of the requested key.  A
      mask of PUBKEY_USAGE_SIG, PUBKEY_USAGE_ENC and PUBKEY_USAGE_CERT.
      If non-zero, then for a key to match, it must implement one of
-     the required uses.  */
+     the required uses.  FWIW: the req_usage field in PKT_public_key
+     used to be an u8 but meanwhile is an u16.  */
   int req_usage;
 
   /* The database handle.  */
@@ -314,14 +315,22 @@ pk_from_block (PKT_public_key *pk, kbnode_t keyblock, kbnode_t found_key)
 
 
 /* Specialized version of get_pubkey which retrieves the key based on
- * information in SIG.  In contrast to get_pubkey PK is required.  IF
- * FORCED_PK is not NULL, this public key is used and copied to PK. */
+ * information in SIG.  In contrast to get_pubkey PK is required.  If
+ * FORCED_PK is not NULL, this public key is used and copied to PK.
+ * If R_KEYBLOCK is not NULL the entire keyblock is stored there if
+ * found and FORCED_PK is not used; if not used or on error NULL is
+ * stored there.  Use this function only to find the key for
+ * verification; it can't be used to select a key for signing.  */
 gpg_error_t
 get_pubkey_for_sig (ctrl_t ctrl, PKT_public_key *pk, PKT_signature *sig,
-                    PKT_public_key *forced_pk)
+                    PKT_public_key *forced_pk, kbnode_t *r_keyblock)
 {
+  gpg_error_t err;
   const byte *fpr;
   size_t fprlen;
+
+  if (r_keyblock)
+    *r_keyblock = NULL;
 
   if (forced_pk)
     {
@@ -329,13 +338,32 @@ get_pubkey_for_sig (ctrl_t ctrl, PKT_public_key *pk, PKT_signature *sig,
       return 0;
     }
 
+  /* Make sure to request only keys cabable of signing.  This makes
+   * sure that a subkey w/o a valid backsig or with bad usage flags
+   * will be skipped.  We also request the verification mode so that
+   * expired and revoked keys are returned.  We keep only a requested
+   * CERT usage in PK for the sake of key signatures.  */
+  pk->req_usage = (PUBKEY_USAGE_SIG | PUBKEY_USAGE_VERIFY
+                   | (pk->req_usage & PUBKEY_USAGE_CERT));
+
   /* First try the ISSUER_FPR info.  */
   fpr = issuer_fpr_raw (sig, &fprlen);
-  if (fpr && !get_pubkey_byfpr (ctrl, pk, NULL, fpr, fprlen))
+  if (fpr && !get_pubkey_byfpr (ctrl, pk, r_keyblock, fpr, fprlen))
     return 0;
+  if (r_keyblock)
+    {
+      release_kbnode (*r_keyblock);
+      *r_keyblock = NULL;
+    }
 
   /* Fallback to use the ISSUER_KEYID.  */
-  return get_pubkey (ctrl, pk, sig->keyid);
+  err = get_pubkey_bykid (ctrl, pk, r_keyblock, sig->keyid);
+  if (err && r_keyblock)
+    {
+      release_kbnode (*r_keyblock);
+      *r_keyblock = NULL;
+    }
+  return err;
 }
 
 
@@ -353,6 +381,10 @@ get_pubkey_for_sig (ctrl_t ctrl, PKT_public_key *pk, PKT_signature *sig,
  * usage will be returned.  As such, it is essential that
  * PK->REQ_USAGE be correctly initialized!
  *
+ * If R_KEYBLOCK is not NULL, then the first result's keyblock is
+ * returned in *R_KEYBLOCK.  This should be freed using
+ * release_kbnode().
+ *
  * Returns 0 on success, GPG_ERR_NO_PUBKEY if there is no public key
  * with the specified key id, or another error code if an error
  * occurs.
@@ -360,24 +392,30 @@ get_pubkey_for_sig (ctrl_t ctrl, PKT_public_key *pk, PKT_signature *sig,
  * If the data was not read from the cache, then the self-signed data
  * has definitely been merged into the public key using
  * merge_selfsigs.  */
-int
-get_pubkey (ctrl_t ctrl, PKT_public_key * pk, u32 * keyid)
+gpg_error_t
+get_pubkey_bykid (ctrl_t ctrl, PKT_public_key *pk, kbnode_t *r_keyblock,
+                  u32 *keyid)
 {
   int internal = 0;
-  int rc = 0;
+  gpg_error_t rc = 0;
+
+  if (r_keyblock)
+    *r_keyblock = NULL;
 
 #if MAX_PK_CACHE_ENTRIES
-  if (pk)
+  if (pk && !r_keyblock)
     {
       /* Try to get it from the cache.  We don't do this when pk is
-         NULL as it does not guarantee that the user IDs are
-         cached. */
+       * NULL as it does not guarantee that the user IDs are cached.
+       * The old get_pubkey_function did not check PK->REQ_USAGE when
+       * reading from the cache.  This is probably a bug.  Note that
+       * the cache is not used when the caller asked to return the
+       * entire keyblock.  This is because the cache does not
+       * associate the public key with its primary key.  */
       pk_cache_entry_t ce;
       for (ce = pk_cache; ce; ce = ce->next)
 	{
 	  if (ce->keyid[0] == keyid[0] && ce->keyid[1] == keyid[1])
-	    /* XXX: We don't check PK->REQ_USAGE here, but if we don't
-	       read from the cache, we do check it!  */
 	    {
 	      copy_public_key (pk, ce->pk);
 	      return 0;
@@ -385,6 +423,7 @@ get_pubkey (ctrl_t ctrl, PKT_public_key * pk, u32 * keyid)
 	}
     }
 #endif
+
   /* More init stuff.  */
   if (!pk)
     {
@@ -430,16 +469,18 @@ get_pubkey (ctrl_t ctrl, PKT_public_key * pk, u32 * keyid)
     ctx.req_usage = pk->req_usage;
     rc = lookup (ctrl, &ctx, 0, &kb, &found_key);
     if (!rc)
-      {
-	pk_from_block (pk, kb, found_key);
-      }
+      pk_from_block (pk, kb, found_key);
     getkey_end (ctrl, &ctx);
+    if (!rc && r_keyblock)
+      {
+        *r_keyblock = kb;
+        kb = NULL;
+      }
     release_kbnode (kb);
   }
-  if (!rc)
-    goto leave;
 
-  rc = GPG_ERR_NO_PUBKEY;
+  if (rc)  /* Return a more useful error code.  */
+    rc = gpg_error (GPG_ERR_NO_PUBKEY);
 
 leave:
   if (!rc)
@@ -447,6 +488,14 @@ leave:
   if (internal)
     free_public_key (pk);
   return rc;
+}
+
+
+/* Wrapper for get_pubkey_bykid w/o keyblock return feature.  */
+int
+get_pubkey (ctrl_t ctrl, PKT_public_key *pk, u32 *keyid)
+{
+  return get_pubkey_bykid (ctrl, pk, NULL, keyid);
 }
 
 
@@ -559,28 +608,6 @@ get_pubkey_fast (ctrl_t ctrl, PKT_public_key * pk, u32 * keyid)
      properly set. */
 
   return rc;
-}
-
-
-/* Return the entire keyblock used to create SIG.  This is a
- * specialized version of get_pubkeyblock.
- *
- * FIXME: This is a hack because get_pubkey_for_sig was already called
- * and it could have used a cache to hold the key.  */
-kbnode_t
-get_pubkeyblock_for_sig (ctrl_t ctrl, PKT_signature *sig)
-{
-  const byte *fpr;
-  size_t fprlen;
-  kbnode_t keyblock;
-
-  /* First try the ISSUER_FPR info.  */
-  fpr = issuer_fpr_raw (sig, &fprlen);
-  if (fpr && !get_pubkey_byfpr (ctrl, NULL, &keyblock, fpr, fprlen))
-    return keyblock;
-
-  /* Fallback to use the ISSUER_KEYID.  */
-  return get_pubkeyblock (ctrl, sig->keyid);
 }
 
 
@@ -772,10 +799,10 @@ leave:
    should be freed using release_kbnode().
 
    If RET_KDBHD is not NULL, then the new database handle used to
-   conduct the search is returned in *RET_KDBHD.  This can be used to
-   get subsequent results using keydb_search_next.  Note: in this
-   case, no advanced filtering is done for subsequent results (e.g.,
-   WANT_SECRET and PK->REQ_USAGE are not respected).
+   conduct the search is returned in *RET_KDBHD, holding the lock.
+   This can be used to get subsequent results using keydb_search_next.
+   Note: in this case, no advanced filtering is done for subsequent
+   results (e.g., WANT_SECRET and PK->REQ_USAGE are not respected).
 
    This function returns 0 on success.  Otherwise, an error code is
    returned.  In particular, GPG_ERR_NO_PUBKEY or GPG_ERR_NO_SECKEY
@@ -868,9 +895,17 @@ key_byname (ctrl_t ctrl, GETKEY_CTX *retctx, strlist_t namelist,
   if (!ret_kb)
     ret_kb = &help_kb;
 
+  if (ret_kdbhd)
+    keydb_lock (ctx->kr_handle);
+
   if (pk)
     {
+      /* It is a bit tricky to allow returning an ADSK key: lookup
+       * masks the req_usage flags using the standard usage maps and
+       * only if ctx->allow_adsk is set, sets the RENC flag again.  */
       ctx->req_usage = pk->req_usage;
+      if ((pk->req_usage & PUBKEY_USAGE_RENC))
+        ctx->allow_adsk = 1;
     }
 
   rc = lookup (ctrl, ctx, want_secret, ret_kb, &found_key);
@@ -1939,7 +1974,7 @@ get_pubkey_byfpr_fast (ctrl_t ctrl, PKT_public_key * pk,
   gpg_error_t err;
   KBNODE keyblock;
 
-  err = get_keyblock_byfpr_fast (ctrl, &keyblock, NULL, fpr, fprlen, 0);
+  err = get_keyblock_byfpr_fast (ctrl, &keyblock, NULL, 0, fpr, fprlen, 0);
   if (!err)
     {
       if (pk)
@@ -1956,11 +1991,14 @@ get_pubkey_byfpr_fast (ctrl_t ctrl, PKT_public_key * pk,
  * R_HD may be NULL.  If LOCK is set the handle has been opend in
  * locked mode and keydb_disable_caching () has been called.  On error
  * R_KEYBLOCK is set to NULL but R_HD must be released by the caller;
- * it may have a value of NULL, though.  This allows one to do an insert
- * operation on a locked keydb handle.  */
+ * it may have a value of NULL, though.  This allows one to do an
+ * insert operation on a locked keydb handle.  If PRIMARY_ONLY is set
+ * the function returns a keyblock which has the requested fingerprint
+ * has primary key.  */
 gpg_error_t
 get_keyblock_byfpr_fast (ctrl_t ctrl,
                          kbnode_t *r_keyblock, KEYDB_HANDLE *r_hd,
+                         int primary_only,
                          const byte *fpr, size_t fprlen, int lock)
 {
   gpg_error_t err;
@@ -1968,6 +2006,8 @@ get_keyblock_byfpr_fast (ctrl_t ctrl,
   kbnode_t keyblock;
   byte fprbuf[MAX_FINGERPRINT_LEN];
   int i;
+  byte tmpfpr[MAX_FINGERPRINT_LEN];
+  size_t tmpfprlen;
 
   if (r_keyblock)
     *r_keyblock = NULL;
@@ -1999,6 +2039,7 @@ get_keyblock_byfpr_fast (ctrl_t ctrl,
   if (r_hd)
     *r_hd = hd;
 
+ again:
   err = keydb_search_fpr (hd, fprbuf, fprlen);
   if (gpg_err_code (err) == GPG_ERR_NOT_FOUND)
     {
@@ -2017,6 +2058,17 @@ get_keyblock_byfpr_fast (ctrl_t ctrl,
 
   log_assert (keyblock->pkt->pkttype == PKT_PUBLIC_KEY
               || keyblock->pkt->pkttype == PKT_PUBLIC_SUBKEY);
+
+  if (primary_only)
+    {
+      fingerprint_from_pk (keyblock->pkt->pkt.public_key, tmpfpr, &tmpfprlen);
+      if (fprlen != tmpfprlen || memcmp (fpr, tmpfpr, fprlen))
+        {
+          release_kbnode (keyblock);
+          keyblock = NULL;
+          goto again;
+        }
+    }
 
   /* Not caching key here since it won't have all of the fields
      properly set. */
@@ -2689,13 +2741,42 @@ fixup_uidnode (KBNODE uidnode, KBNODE signode, u32 keycreated)
     uid->flags.ks_modify = 0;
 }
 
+
+/* Store the revocation signature into the RINFO struct.  */
 static void
 sig_to_revoke_info (PKT_signature * sig, struct revoke_info *rinfo)
 {
+  int reason_seq = 0;
+  size_t reason_n;
+  const byte *reason_p;
+
   rinfo->date = sig->timestamp;
   rinfo->algo = sig->pubkey_algo;
   rinfo->keyid[0] = sig->keyid[0];
   rinfo->keyid[1] = sig->keyid[1];
+  xfree (rinfo->reason_comment);
+  rinfo->reason_comment = NULL;
+  rinfo->reason_comment_len = 0;
+  rinfo->reason_code = 0;
+  rinfo->got_reason = 0;
+
+  while ((reason_p = enum_sig_subpkt (sig, 1, SIGSUBPKT_REVOC_REASON,
+                                      &reason_n, &reason_seq, NULL))
+         && !reason_n)
+    ; /* Skip over empty reason packets.  */
+
+  if (reason_p)
+    {
+      rinfo->got_reason = 1;
+      rinfo->reason_code = *reason_p;
+      reason_n--; reason_p++;
+      if (reason_n)
+        {
+          rinfo->reason_comment = xmalloc (reason_n);
+          memcpy (rinfo->reason_comment, reason_p, reason_n);
+          rinfo->reason_comment_len = reason_n;
+        }
+    }
 }
 
 
@@ -3133,7 +3214,7 @@ merge_selfsigs_main (ctrl_t ctrl, kbnode_t keyblock, int *r_revoked,
       /* Check that the usage matches the usage as given by the algo.  */
       int x = openpgp_pk_algo_usage (pk->pubkey_algo);
       if (x) /* Mask it down to the actual allowed usage.  */
-	key_usage &= x;
+	key_usage &= (x | PUBKEY_USAGE_GROUP);
     }
 
   /* Whatever happens, it's a primary key, so it can certify. */
@@ -3408,7 +3489,7 @@ merge_selfsigs_subkey (ctrl_t ctrl, kbnode_t keyblock, kbnode_t subnode)
       /* Check that the usage matches the usage as given by the algo.  */
       int x = openpgp_pk_algo_usage (subpk->pubkey_algo);
       if (x) /* Mask it down to the actual allowed usage.  */
-	key_usage &= x;
+	key_usage &= (x | PUBKEY_USAGE_GROUP);
     }
 
   subpk->pubkey_usage = key_usage;
@@ -3515,7 +3596,7 @@ merge_selfsigs (ctrl_t ctrl, kbnode_t keyblock)
 {
   KBNODE k;
   int revoked;
-  struct revoke_info rinfo;
+  struct revoke_info rinfo = { 0 };
   PKT_public_key *main_pk;
   prefitem_t *prefs;
   unsigned int mdc_feature;
@@ -3562,8 +3643,19 @@ merge_selfsigs (ctrl_t ctrl, kbnode_t keyblock)
 		pk->flags.valid = 0;
 	      if (revoked && !pk->flags.revoked)
 		{
+                  /* Copy RINFO reason part only the first time
+                   * because we don't want to propagate the reason to
+                   * the subkeys.  This assumes that we get the public
+                   * key first.  */
 		  pk->flags.revoked = revoked;
-		  memcpy (&pk->revoked, &rinfo, sizeof (rinfo));
+                  memcpy (&pk->revoked, &rinfo, sizeof (rinfo));
+                  if (rinfo.got_reason)
+                    {
+                      rinfo.got_reason = 0;
+                      rinfo.reason_code = 0;
+                      rinfo.reason_comment = NULL;  /*(owner is pk->revoked)*/
+                      rinfo.reason_comment_len = 0;
+                    }
 		}
 	      if (main_pk->has_expired)
 		{
@@ -3573,7 +3665,7 @@ merge_selfsigs (ctrl_t ctrl, kbnode_t keyblock)
 		}
 	    }
 	}
-      return;
+      goto leave;
     }
 
   /* Set the preference list of all keys to those of the primary real
@@ -3611,6 +3703,9 @@ merge_selfsigs (ctrl_t ctrl, kbnode_t keyblock)
 	  pk->flags.aead = aead_feature;
 	}
     }
+
+ leave:
+  xfree (rinfo.reason_comment);
 }
 
 
@@ -3677,14 +3772,22 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
   kbnode_t latest_key;
   PKT_public_key *pk;
   int req_prim;
+  int diag_exactfound = 0;
+  int verify_mode = 0;
   u32 curtime = make_timestamp ();
 
   if (r_flags)
     *r_flags = 0;
 
+
+  /* The verify mode is used to change the behaviour so that we can
+   * return an expired or revoked key for signature verification.  */
+  verify_mode = ((req_usage & PUBKEY_USAGE_VERIFY)
+                 && (req_usage & (PUBKEY_USAGE_CERT|PUBKEY_USAGE_SIG)));
+
 #define USAGE_MASK  (PUBKEY_USAGE_SIG|PUBKEY_USAGE_ENC|PUBKEY_USAGE_CERT)
   req_usage &= USAGE_MASK;
-  /* In allow ADSK mode make sure both encryption bis are set.  */
+  /* In allow ADSK mode make sure both encryption bits are set.  */
   if (allow_adsk && (req_usage & PUBKEY_USAGE_XENC_MASK))
     req_usage |= PUBKEY_USAGE_XENC_MASK;
 
@@ -3707,11 +3810,10 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
         {
           if (want_exact)
             {
-              if (DBG_LOOKUP)
-                log_debug ("finish_lookup: exact search requested and found\n");
               foundk = k;
               pk = k->pkt->pkt.public_key;
               pk->flags.exact = 1;
+              diag_exactfound = 1;
               break;
             }
           else if (!allow_adsk && (k->pkt->pkt.public_key->pubkey_usage
@@ -3738,13 +3840,17 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
     }
 
   if (DBG_LOOKUP)
-    log_debug ("finish_lookup: checking key %08lX (%s)(req_usage=%x)\n",
+    log_debug ("finish_lookup: checking key %08lX (%s)(req_usage=%x%s)\n",
 	       (ulong) keyid_from_pk (keyblock->pkt->pkt.public_key, NULL),
-	       foundk ? "one" : "all", req_usage);
+	       foundk ? "one" : "all", req_usage, verify_mode? ",verify":"");
+  if (diag_exactfound && DBG_LOOKUP)
+    log_debug ("\texact search requested and found\n");
 
   if (!req_usage)
     {
       latest_key = foundk ? foundk : keyblock;
+      if (DBG_LOOKUP)
+        log_debug ("\tno usage requested - accepting key\n");
       goto found;
     }
 
@@ -3790,37 +3896,48 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
 		log_debug ("\tsubkey not valid\n");
 	      continue;
 	    }
-	  if (!((pk->pubkey_usage & USAGE_MASK) & req_usage))
+	  if (!((pk->pubkey_usage & (USAGE_MASK | PUBKEY_USAGE_RENC))
+                & req_usage))
 	    {
 	      if (DBG_LOOKUP)
 		log_debug ("\tusage does not match: want=%x have=%x\n",
 			   req_usage, pk->pubkey_usage);
 	      continue;
 	    }
+	  if (!verify_mode
+              && opt.flags.disable_pqc_encryption
+              && pk->pubkey_algo == PUBKEY_ALGO_KYBER)
+	    {
+	      if (DBG_LOOKUP)
+                log_debug ("\tsubkey skipped due to option %s\n",
+                           "--disable-pqc-encryption");
+	      continue;
+	    }
 
           n_subkeys++;
-	  if (pk->flags.revoked)
+	  if (!verify_mode && pk->flags.revoked)
 	    {
 	      if (DBG_LOOKUP)
 		log_debug ("\tsubkey has been revoked\n");
               n_revoked_or_expired++;
 	      continue;
 	    }
-	  if (pk->has_expired && !opt.ignore_expiration)
+	  if (!verify_mode && pk->has_expired && !opt.ignore_expiration)
 	    {
 	      if (DBG_LOOKUP)
 		log_debug ("\tsubkey has expired\n");
               n_revoked_or_expired++;
 	      continue;
 	    }
-	  if (pk->timestamp > curtime && !opt.ignore_valid_from)
+	  if (!verify_mode && pk->timestamp > curtime && !opt.ignore_valid_from)
 	    {
 	      if (DBG_LOOKUP)
 		log_debug ("\tsubkey not yet valid\n");
 	      continue;
 	    }
 
-          if (opt.flags.require_pqc_encryption
+          if (!verify_mode
+              && opt.flags.require_pqc_encryption
               && (req_usage & PUBKEY_USAGE_XENC_MASK)
               && pk->pubkey_algo != PUBKEY_ALGO_KYBER)
             {
@@ -3830,7 +3947,7 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
             }
 
 
-          if (want_secret)
+          if (!verify_mode && want_secret)
             {
               int secret_key_avail = agent_probe_secret_key (NULL, pk);
 
@@ -3857,7 +3974,8 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
             }
 
 	  if (DBG_LOOKUP)
-	    log_debug ("\tsubkey might be fine\n");
+	    log_debug ("\tsubkey might be fine%s\n",
+                       verify_mode? " for verification":"");
 	  /* In case a key has a timestamp of 0 set, we make sure
 	     that it is used.  A better change would be to compare
 	     ">=" but that might also change the selected keys and
@@ -3898,17 +4016,18 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
 	    log_debug ("\tprimary key usage does not match: "
 		       "want=%x have=%x\n", req_usage, pk->pubkey_usage);
 	}
-      else if (pk->flags.revoked)
+      else if (!verify_mode && pk->flags.revoked)
 	{
 	  if (DBG_LOOKUP)
 	    log_debug ("\tprimary key has been revoked\n");
 	}
-      else if (pk->has_expired)
+      else if (!verify_mode && pk->has_expired)
 	{
 	  if (DBG_LOOKUP)
 	    log_debug ("\tprimary key has expired\n");
 	}
-      else if (opt.flags.require_pqc_encryption
+      else if (!verify_mode
+               && opt.flags.require_pqc_encryption
                && (req_usage & PUBKEY_USAGE_XENC_MASK)
                && pk->pubkey_algo != PUBKEY_ALGO_KYBER)
         {
@@ -3918,7 +4037,8 @@ finish_lookup (kbnode_t keyblock, unsigned int req_usage, int want_exact,
       else /* Okay.  */
 	{
 	  if (DBG_LOOKUP)
-	    log_debug ("\tprimary key may be used\n");
+	    log_debug ("\tprimary key may be used%s\n",
+                       verify_mode? " for verification":"");
 	  latest_key = keyblock;
 	}
     }

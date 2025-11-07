@@ -28,82 +28,9 @@
 
 #include "agent.h"
 #include "../common/openpgpdefs.h"
+#include "../common/util.h"
 
 
-/* Table with parameters for KEM decryption.  Use get_ecc_parms to
- * find an entry.  */
-struct ecc_params
-{
-  const char *curve;            /* Canonical name of the curve.  */
-  size_t pubkey_len;            /* Pubkey in the SEXP representation.   */
-  size_t scalar_len;
-  size_t point_len;
-  size_t shared_len;
-  int hash_algo;
-  int kem_algo;
-  int scalar_reverse;
-};
-
-static const struct ecc_params ecc_table[] =
-  {
-    {
-      "Curve25519",
-      33, 32, 32, 32,
-      GCRY_MD_SHA3_256, GCRY_KEM_RAW_X25519,
-      1
-    },
-    {
-      "X448",
-      56, 56, 56, 64,
-      GCRY_MD_SHA3_512, GCRY_KEM_RAW_X448,
-      0
-    },
-    {
-      "brainpoolP256r1",
-      65, 32, 65, 32,
-      GCRY_MD_SHA3_256, GCRY_KEM_RAW_BP256,
-      0
-    },
-    {
-      "brainpoolP384r1",
-      97, 48, 97, 64,
-      GCRY_MD_SHA3_512, GCRY_KEM_RAW_BP384,
-      0
-    },
-    {
-      "brainpoolP512r1",
-      129, 64, 129, 64,
-      GCRY_MD_SHA3_512, GCRY_KEM_RAW_BP512,
-      0
-    },
-    { NULL, 0, 0, 0, 0, 0, 0, 0 }
-};
-
-
-/* Maximum buffer sizes required for ECC KEM.  Keep this aligned to
- * the ecc_table above.  */
-#define ECC_SCALAR_LEN_MAX 64
-#define ECC_POINT_LEN_MAX (1+2*64)
-#define ECC_HASH_LEN_MAX 64
-
-
-
-/* Return the ECC parameters for CURVE.  CURVE is expected to be the
- * canonical name.  */
-static const struct ecc_params *
-get_ecc_params (const char *curve)
-{
-  int i;
-
-  for (i = 0; ecc_table[i].curve; i++)
-    if (!strcmp (ecc_table[i].curve, curve))
-      return &ecc_table[i];
-
-  return NULL;
-}
-
-
-
 /* DECRYPT the stuff in ciphertext which is expected to be a S-Exp.
    Try to get the key from CTRL and write the decoded stuff back to
    OUTFP.   The padding information is stored at R_PADDING with -1
@@ -245,8 +172,8 @@ reverse_buffer (unsigned char *buffer, unsigned int length)
 
 
 static gpg_error_t
-ecc_extract_pk_from_key (const struct ecc_params *ecc, gcry_sexp_t s_skey,
-                         unsigned char *ecc_pk)
+ecc_extract_pk_from_key (const struct gnupg_ecc_params *ecc,
+                         gcry_sexp_t s_skey, unsigned char *ecc_pk)
 {
   gpg_error_t err;
   unsigned int nbits;
@@ -291,8 +218,8 @@ ecc_extract_pk_from_key (const struct ecc_params *ecc, gcry_sexp_t s_skey,
 }
 
 static gpg_error_t
-ecc_extract_sk_from_key (const struct ecc_params *ecc, gcry_sexp_t s_skey,
-                         unsigned char *ecc_sk)
+ecc_extract_sk_from_key (const struct gnupg_ecc_params *ecc,
+                         gcry_sexp_t s_skey, unsigned char *ecc_sk)
 {
   gpg_error_t err;
   unsigned int nbits;
@@ -333,7 +260,7 @@ ecc_extract_sk_from_key (const struct ecc_params *ecc, gcry_sexp_t s_skey,
 }
 
 static gpg_error_t
-ecc_raw_kem (const struct ecc_params *ecc, gcry_sexp_t s_skey,
+ecc_raw_kem (const struct gnupg_ecc_params *ecc, gcry_sexp_t s_skey,
              const unsigned char *ecc_ct, unsigned char *ecc_ecdh)
 {
   gpg_error_t err = 0;
@@ -424,21 +351,23 @@ ecc_get_curve (ctrl_t ctrl, gcry_sexp_t s_skey, const char **r_curve)
 }
 
 /* Given a private key in SEXP by S_SKEY0 and a cipher text by ECC_CT
- * with length ECC_POINT_LEN, do ECC-KEM operation.  Result is
- * returned in the memory referred by ECC_SS.  Shared secret length is
- * returned in the memory referred by R_SHARED_LEN.  CTRL is used to
+ * with length ECC_POINT_LEN, do ECC KEM decap (== raw ECDH)
+ * operation.  Result is returned in the memory referred by ECC_ECDH.
+ * Public key is extracted and put into ECC_PK.  The pointer to ECC
+ * parameters is stored into R_ECC.  SHADOW_INFO0 is used to determine
+ * if the private key is actually on smartcard.  CTRL is used to
  * access smartcard, internally.  */
 static gpg_error_t
-ecc_pgp_kem_decrypt (ctrl_t ctrl, gcry_sexp_t s_skey0,
-                     unsigned char *shadow_info0,
-                     const unsigned char *ecc_ct, size_t ecc_point_len,
-                     unsigned char *ecc_ss, size_t *r_shared_len)
+ecc_kem_decap (ctrl_t ctrl, gcry_sexp_t s_skey0,
+               const unsigned char *shadow_info0,
+               const unsigned char *ecc_ct, size_t ecc_point_len,
+               unsigned char ecc_ecdh[ECC_POINT_LEN_MAX],
+               unsigned char ecc_pk[ECC_POINT_LEN_MAX],
+               const struct gnupg_ecc_params **r_ecc)
 {
   gpg_error_t err;
-  unsigned char ecc_ecdh[ECC_POINT_LEN_MAX];
-  unsigned char ecc_pk[ECC_POINT_LEN_MAX];
   const char *curve;
-  const struct ecc_params *ecc = NULL;
+  const struct gnupg_ecc_params *ecc = NULL;
 
   if (ecc_point_len > ECC_POINT_LEN_MAX)
     return gpg_error (GPG_ERR_INV_DATA);
@@ -453,18 +382,24 @@ ecc_pgp_kem_decrypt (ctrl_t ctrl, gcry_sexp_t s_skey0,
       return err;
     }
 
-  ecc = get_ecc_params (curve);
+  if (DBG_CRYPTO)
+    log_debug ("ECC    curve: %s\n", curve);
+
+  ecc = gnupg_get_ecc_params (curve);
   if (!ecc)
     {
       if (opt.verbose)
         log_info ("%s: curve '%s' not supported\n", __func__, curve);
       return gpg_error (GPG_ERR_BAD_SECKEY);
     }
+  *r_ecc = ecc;
 
-  *r_shared_len = ecc->shared_len;
-
-  if (DBG_CRYPTO)
-    log_debug ("ECC    curve: %s\n", curve);
+  if (ecc->may_have_prefix && ecc_point_len == ecc->point_len + 1
+      && *ecc_ct == 0x40)
+    {
+      ecc_ct++;
+      ecc_point_len--;
+    }
 
   if (ecc->point_len != ecc_point_len)
     {
@@ -485,8 +420,13 @@ ecc_pgp_kem_decrypt (ctrl_t ctrl, gcry_sexp_t s_skey0,
     {
       if (s_skey0 && agent_is_tpm2_key (s_skey0))
         {
-          log_error ("TPM decryption failed: %s\n", gpg_strerror (err));
-          return gpg_error (GPG_ERR_NOT_IMPLEMENTED);
+          err = agent_tpm2d_ecc_kem (ctrl, shadow_info0,
+                                     ecc_ct, ecc->point_len, ecc_ecdh);
+          if (err)
+            {
+              log_error ("TPM decryption failed: %s\n", gpg_strerror (err));
+              return err;
+            }
         }
       else
         {
@@ -508,22 +448,6 @@ ecc_pgp_kem_decrypt (ctrl_t ctrl, gcry_sexp_t s_skey0,
   if (DBG_CRYPTO)
     log_printhex (ecc_ecdh, ecc_point_len, "ECC     ecdh:");
 
-  err = gnupg_ecc_kem_kdf (ecc_ss, ecc->shared_len, ecc->hash_algo,
-                           ecc_ecdh, ecc->point_len, ecc_ct, ecc->point_len,
-                           ecc_pk, ecc->point_len);
-
-  wipememory (ecc_ecdh, sizeof ecc_ecdh);
-
-  if (err)
-    {
-      if (opt.verbose)
-        log_info ("%s: kdf for ECC failed\n", __func__);
-      return err;
-    }
-
-  if (DBG_CRYPTO)
-    log_printhex (ecc_ss, ecc->shared_len, "ECC   shared:");
-
   return 0;
 }
 
@@ -531,14 +455,14 @@ ecc_pgp_kem_decrypt (ctrl_t ctrl, gcry_sexp_t s_skey0,
    First keygrip is for ECC, second keygrip is for PQC.  CIPHERTEXT
    should follow the format of:
 
-	(enc-val(pqc(c%d)(e%m)(k%m)(s%m)(fixed-info&)))
-        c: cipher identifier (symmetric)
+        (enc-val(pqc(c%d)(e%m)(k%m)(s%m)(fixed-info%b)))
+        c: cipher identifier (of session key (wrapped key))
         e: ECDH ciphertext
         k: ML-KEM ciphertext
         s: encrypted session key
         fixed-info: A buffer with the fixed info.
 
-   FIXME: For now, possible keys on smartcard are not supported.
+   FIXME: For now, possible PQC key on smartcard is not yet supported.
   */
 static gpg_error_t
 composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
@@ -561,8 +485,12 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
   gcry_mpi_t ecc_ct_mpi = NULL;
   const unsigned char *ecc_ct;
   size_t ecc_ct_len;
+  unsigned char ecc_ecdh[ECC_POINT_LEN_MAX];
+  unsigned char ecc_pk[ECC_POINT_LEN_MAX];
   unsigned char ecc_ss[ECC_HASH_LEN_MAX];
+  int ecc_hashalgo;
   size_t ecc_shared_len, ecc_point_len;
+  const struct gnupg_ecc_params *ecc;
 
   enum gcry_kem_algos mlkem_kem_algo;
   gcry_mpi_t mlkem_sk_mpi = NULL;
@@ -583,7 +511,7 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
   gcry_buffer_t fixed_info = { 0, 0, 0, NULL };
 
   err = agent_key_from_file (ctrl, NULL, desc_text,
-                             ctrl->keygrip, &shadow_info0,
+                             NULL, &shadow_info0,
                              CACHE_MODE_NORMAL, NULL, &s_skey0, NULL, NULL);
   if (err && gpg_err_code (err) != GPG_ERR_NO_SECKEY)
     {
@@ -629,10 +557,25 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
 
   /* Firstly, ECC part.  */
   ecc_point_len = ecc_ct_len;
-  err = ecc_pgp_kem_decrypt (ctrl, s_skey0, shadow_info0, ecc_ct, ecc_point_len,
-                             ecc_ss, &ecc_shared_len);
+  err = ecc_kem_decap (ctrl, s_skey0, shadow_info0, ecc_ct, ecc_point_len,
+                       ecc_ecdh, ecc_pk, &ecc);
   if (err)
     goto leave;
+  ecc_hashalgo = ecc->hash_algo;
+  ecc_shared_len = gcry_md_get_algo_dlen (ecc_hashalgo);
+  err = gnupg_ecc_kem_simple_kdf (ecc_ss, ecc_shared_len, ecc_hashalgo,
+                                  ecc_ecdh, ecc_point_len,
+                                  ecc_ct, ecc_point_len,
+                                  ecc_pk, ecc_point_len);
+  if (err)
+    {
+      if (opt.verbose)
+        log_info ("%s: kdf for ECC failed\n", __func__);
+      goto leave;
+    }
+  wipememory (ecc_ecdh, sizeof ecc_ecdh);
+  if (DBG_CRYPTO)
+    log_printhex (ecc_ss, ecc_shared_len, "ECC   shared:");
 
   /* Secondly, PQC part.  For now, we assume ML-KEM.  */
   err = gcry_sexp_extract_param (s_skey1, NULL, "/s", &mlkem_sk_mpi, NULL);
@@ -726,10 +669,10 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
     }
 
   err = gcry_cipher_setkey (hd, kek, kek_len);
-
   sessionkey_len = encrypted_sessionkey_len - 8;
-  err = gcry_cipher_decrypt (hd, sessionkey, sessionkey_len,
-                             encrypted_sessionkey, encrypted_sessionkey_len);
+  if (!err)
+    err = gcry_cipher_decrypt (hd, sessionkey, sessionkey_len,
+                               encrypted_sessionkey, encrypted_sessionkey_len);
   gcry_cipher_close (hd);
 
   mpi_release (encrypted_sessionkey_mpi);
@@ -764,43 +707,184 @@ composite_pgp_kem_decrypt (ctrl_t ctrl, const char *desc_text,
   return err;
 }
 
+/* For ECC PGP/CMS KEM, decrypt CIPHERTEXT using KEM API.  CIPHERTEXT
+   should follow the format of:
+
+        (enc-val(ecc(c%d)(h%d)(e%m)(s%m)(kdf-params%b)))
+        c: cipher identifier (of wrapping key)
+        h: hash identifier
+        e: ECDH ciphertext
+        s: encrypted session key
+        kdf-params: A buffer with the KDF parameters.
+
+  */
+static gpg_error_t
+ecc_kem_decrypt (int is_pgp, ctrl_t ctrl, const char *desc_text,
+                 gcry_sexp_t s_cipher, membuf_t *outbuf)
+{
+  gcry_sexp_t s_skey = NULL;
+  unsigned char *shadow_info = NULL;
+  gpg_error_t err = 0;
+
+  unsigned int nbits;
+
+  int algo;
+  int hashalgo;
+  gcry_mpi_t encrypted_sessionkey_mpi = NULL;
+  const unsigned char *encrypted_sessionkey;
+  size_t encrypted_sessionkey_len;
+
+  gcry_mpi_t ecc_ct_mpi = NULL;
+  const unsigned char *ecc_ct;
+  size_t ecc_ct_len;
+  unsigned char ecc_ecdh[ECC_POINT_LEN_MAX];
+  unsigned char ecc_pk[ECC_POINT_LEN_MAX];
+  size_t ecc_point_len;
+  const struct gnupg_ecc_params *ecc;
+
+  unsigned char *kek = NULL;
+  size_t kek_len;
+
+  gcry_cipher_hd_t hd;
+  unsigned char sessionkey[256];
+  size_t sessionkey_len;
+  gcry_buffer_t kdf_params = { 0, 0, 0, NULL };
+
+  err = agent_key_from_file (ctrl, NULL, desc_text,
+                             NULL, &shadow_info,
+                             CACHE_MODE_NORMAL, NULL, &s_skey, NULL, NULL);
+  if (err && gpg_err_code (err) != GPG_ERR_NO_SECKEY)
+    {
+      log_error ("failed to read the secret key\n");
+      goto leave;
+    }
+
+  err = gcry_sexp_extract_param (s_cipher, NULL, "%dc%dh/es&'kdf-params'",
+                                 &algo, &hashalgo, &ecc_ct_mpi,
+                                 &encrypted_sessionkey_mpi, &kdf_params, NULL);
+  if (err)
+    {
+      if (opt.verbose)
+        log_info ("%s: extracting parameters failed\n", __func__);
+      goto leave;
+    }
+
+  if (!kdf_params.data)
+    {
+      if (opt.verbose)
+        log_info ("%s: the KDF parameters is required\n", __func__);
+      err = gpg_error (GPG_ERR_INV_DATA);
+      goto leave;
+    }
+
+  ecc_ct = gcry_mpi_get_opaque (ecc_ct_mpi, &nbits);
+  ecc_ct_len = (nbits+7)/8;
+
+  encrypted_sessionkey = gcry_mpi_get_opaque (encrypted_sessionkey_mpi, &nbits);
+  encrypted_sessionkey_len = (nbits+7)/8;
+
+  kek_len = gcry_cipher_get_algo_keylen (algo);
+  if (kek_len == 0)
+    {
+      err = gpg_error (GPG_ERR_INV_DATA);
+      goto leave;
+    }
+
+  kek = xtrymalloc (kek_len);
+  if (!kek)
+    {
+      err = gpg_error_from_syserror ();
+      goto leave;
+    }
+
+  ecc_point_len = ecc_ct_len;
+  err = ecc_kem_decap (ctrl, s_skey, shadow_info,
+                       ecc_ct, ecc_point_len,
+                       ecc_ecdh, ecc_pk, &ecc);
+  if (err)
+    goto leave;
+  err = gnupg_ecc_kem_kdf (kek, kek_len, is_pgp, hashalgo,
+                           ecc->point_len > ecc->scalar_len ?
+                           /* For Weierstrass curve, extract
+                              x-component from the point.  */
+                           ecc_ecdh + 1 : ecc_ecdh,
+                           ecc->scalar_len,
+                           (char *)kdf_params.data+kdf_params.off,
+                           kdf_params.len);
+  if (err)
+    {
+      if (opt.verbose)
+        log_info ("%s: kdf for ECC failed\n", __func__);
+      goto leave;
+    }
+  wipememory (ecc_ecdh, sizeof ecc_ecdh);
+  if (DBG_CRYPTO)
+    {
+      log_printhex (kek, kek_len, "KEK key: ");
+    }
+
+  err = gcry_cipher_open (&hd, algo, GCRY_CIPHER_MODE_AESWRAP, 0);
+  if (err)
+    {
+      if (opt.verbose)
+        log_error ("ecdh failed to initialize AESWRAP: %s\n",
+                   gpg_strerror (err));
+      goto leave;
+    }
+
+  if (is_pgp && encrypted_sessionkey[0] != encrypted_sessionkey_len - 1)
+    {
+      err = gpg_error (GPG_ERR_INV_DATA);
+      goto leave;
+    }
+
+  err = gcry_cipher_setkey (hd, kek, kek_len);
+  sessionkey_len = encrypted_sessionkey_len - 8 - !!is_pgp;
+  if (!err)
+    err = gcry_cipher_decrypt (hd, sessionkey, sessionkey_len,
+                               encrypted_sessionkey + !!is_pgp,
+                               encrypted_sessionkey_len - !!is_pgp);
+  gcry_cipher_close (hd);
+
+  if (err)
+    {
+      log_error ("KEM decrypt failed: %s\n", gpg_strerror (err));
+      goto leave;
+    }
+
+  put_membuf_printf (outbuf,
+                     "(5:value%u:", (unsigned int)sessionkey_len);
+  put_membuf (outbuf, sessionkey, sessionkey_len);
+  put_membuf (outbuf, ")", 2);
+
+ leave:
+  wipememory (sessionkey, sizeof sessionkey);
+  if (kek)
+    {
+      wipememory (kek, sizeof kek);
+      xfree (kek);
+    }
+  mpi_release (ecc_ct_mpi);
+  mpi_release (encrypted_sessionkey_mpi);
+  gcry_free (kdf_params.data);
+  gcry_sexp_release (s_skey);
+  xfree (shadow_info);
+  return err;
+}
+
+
 /* DECRYPT the encrypted stuff (like encrypted session key) in
-   CIPHERTEXT using KEM API, with KEMID.  Keys (or a key) are
-   specified in CTRL.  DESC_TEXT is used to retrieve private key.
-   OPTION can be specified for upper layer option for KEM.  Decrypted
-   stuff (like session key) is written to OUTBUF.
+ * CIPHERTEXT using KEM API, with KEMID.  Keys (or a key) are
+ * specified in CTRL.  DESC_TEXT is used to retrieve private key.
+ * Decrypted stuff (like session key) is written to OUTBUF.
  */
 gpg_error_t
 agent_kem_decrypt (ctrl_t ctrl, const char *desc_text, int kemid,
                    const unsigned char *ciphertext, size_t ciphertextlen,
-                   const unsigned char *option, size_t optionlen,
                    membuf_t *outbuf)
 {
   gcry_sexp_t s_cipher = NULL;
   gpg_error_t err = 0;
-
-  /* For now, only PQC-PGP is supported.  */
-  if (kemid != KEM_PQC_PGP)
-    return gpg_error (GPG_ERR_UNSUPPORTED_ALGORITHM);
-
-  (void)optionlen;
-  if (kemid == KEM_PQC_PGP && option)
-    {
-      log_error ("PQC-PGP requires no option\n");
-      return gpg_error (GPG_ERR_INV_ARG);
-    }
-
-  if (!ctrl->have_keygrip)
-    {
-      log_error ("speculative decryption not yet supported\n");
-      return gpg_error (GPG_ERR_NO_SECKEY);
-    }
-
-  if (!ctrl->have_keygrip1)
-    {
-      log_error ("Composite KEM requires two KEYGRIPs\n");
-      return gpg_error (GPG_ERR_NO_SECKEY);
-    }
 
   err = gcry_sexp_sscan (&s_cipher, NULL, (char*)ciphertext, ciphertextlen);
   if (err)
@@ -809,14 +893,33 @@ agent_kem_decrypt (ctrl_t ctrl, const char *desc_text, int kemid,
       return gpg_error (GPG_ERR_INV_DATA);
     }
 
-  if (DBG_CRYPTO)
+  if (kemid == KEM_PGP || kemid == KEM_CMS)
+    err = ecc_kem_decrypt (kemid == KEM_PGP, ctrl, desc_text, s_cipher, outbuf);
+  else if (kemid == KEM_PQC_PGP)
     {
-      log_printhex (ctrl->keygrip, 20, "keygrip0:");
-      log_printhex (ctrl->keygrip1, 20, "keygrip1:");
-      gcry_log_debugsxp ("cipher", s_cipher);
-    }
+      if (!ctrl->have_keygrip)
+        {
+          log_error ("speculative decryption not yet supported\n");
+          return gpg_error (GPG_ERR_NO_SECKEY);
+        }
 
-  err = composite_pgp_kem_decrypt (ctrl, desc_text, s_cipher, outbuf);
+      if (!ctrl->have_keygrip1)
+        {
+          log_error ("Composite KEM requires two KEYGRIPs\n");
+          return gpg_error (GPG_ERR_NO_SECKEY);
+        }
+
+      if (DBG_CRYPTO)
+        {
+          log_printhex (ctrl->keygrip, 20, "keygrip0:");
+          log_printhex (ctrl->keygrip1, 20, "keygrip1:");
+          gcry_log_debugsxp ("cipher", s_cipher);
+        }
+
+      err = composite_pgp_kem_decrypt (ctrl, desc_text, s_cipher, outbuf);
+    }
+  else
+    err = gpg_error (GPG_ERR_INV_ARG);
 
   gcry_sexp_release (s_cipher);
   return err;

@@ -24,6 +24,7 @@ Options:
         [--url=STRING]    Include STRING as URL (default=$url)
         [--stamp]         Use a stamp file to avoid double signing
         [--dry-run]       Do not actually run osslsigncode
+                          (same as GPG_AUTHCODE_SIGN_MODE=disable)
         [--template]      Print a template for ~/.gnupg-autogenrc
         [--version]       Print version and exit
 EOF
@@ -100,7 +101,7 @@ dryrun=
 stamp=
 buildtype=
 # Set defaults according to our build system.
-if [ -n "$abs_top_srcdir" -a -f "$abs_top_srcdir/packages/BUILDTYPE" ]; then
+if [ -n "$abs_top_srcdir" ] && [ -f "$abs_top_srcdir/packages/BUILDTYPE" ]; then
     buildtype=$(cat "$abs_top_srcdir/packages/BUILDTYPE")
 elif [ -f "../packages/BUILDTYPE" ]; then
     buildtype=$(cat "../packages/BUILDTYPE")
@@ -183,10 +184,13 @@ if [ ! -f $autogenrc ]; then
     exit 1
 fi
 
+[ "$GPG_AUTHCODE_SIGN_MODE" = "disable" ] && dryrun=yes
+
+
 # Define the cleanup routine for osslsigncode
 cleanup()
 {
-    if [ -n "$outname" -a -f "${outname}.tmp" ]; then
+    if [ -n "$outname" ] && [ -f "${outname}.tmp" ]; then
         echo >&2 "Cleaning up: Removing ${outname}.tmp"
         rm -f "${outname}.tmp"
     fi
@@ -215,6 +219,10 @@ if [ -n "$dryrun" ]; then
 
     echo >&2 "$PGM: would sign: '$inname' to '$outname'"
 
+elif [ $(wc -c < "$inname" ) -lt 256 ]; then
+
+    echo >&2 "$PGM: skipping '$inname' which is too short"
+
 elif [ -n "$AUTHENTICODE_SIGNHOST" ]; then
 
     echo >&2 "$PGM: Signing via host $AUTHENTICODE_SIGNHOST"
@@ -232,6 +240,12 @@ elif [ -n "$AUTHENTICODE_SIGNHOST" ]; then
 elif [ "$AUTHENTICODE_KEY" = card ]; then
 
     echo >&2 "$PGM: Signing using a card: '$inname'"
+
+    if echo "$inname" | egrep 'dll-e?x$' >/dev/null ; then
+        # osslsignecode does not like *.dll-x and *.dll-ex
+        cp "$inname" "$inname.tmp.dll"
+        inname="$inname.tmp.dll"
+    fi
 
     while ! "$OSSLSIGNCODE" sign \
        -pkcs11engine "$OSSLPKCS11ENGINE" \
@@ -253,6 +267,7 @@ elif [ "$AUTHENTICODE_KEY" = card ]; then
       sleep $waittime
       waittime=$(( $waittime * 2 ))
     done
+    [ -f "$inname.tmp.dll" ] && rm "$inname.tmp.dll"
     rm "$outname.tmp.log"
     cp "$outname.tmp" "$outname"
     rm "$outname.tmp"

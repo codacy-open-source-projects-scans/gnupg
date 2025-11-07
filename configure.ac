@@ -1,7 +1,7 @@
 # configure.ac - for GnuPG 2.1
 # Copyright (C) 1998-2019 Werner Koch
 # Copyright (C) 1998-2021 Free Software Foundation, Inc.
-# Copyright (C) 2003-2023 g10 Code GmbH
+# Copyright (C) 2003-2025 g10 Code GmbH
 #
 # This file is part of GnuPG.
 #
@@ -29,7 +29,7 @@ min_automake_version="1.16.3"
 m4_define([mym4_package],[gnupg])
 m4_define([mym4_major], [2])
 m4_define([mym4_minor], [5])
-m4_define([mym4_micro], [2])
+m4_define([mym4_micro], [14])
 
 # To start a new development series, i.e a new major or minor number
 # you need to mark an arbitrary commit before the first beta release
@@ -57,7 +57,7 @@ AC_INIT([mym4_package],[mym4_version],[https://bugs.gnupg.org])
 # As well as the source info for the man pages.
 AC_DEFINE_UNQUOTED(GNUPG_SWDB_TAG, "gnupg26", [swdb tag for this branch])
 
-NEED_GPGRT_VERSION=1.50
+NEED_GPGRT_VERSION=1.56
 
 NEED_LIBGCRYPT_API=1
 NEED_LIBGCRYPT_VERSION=1.11.0
@@ -515,7 +515,7 @@ AH_BOTTOM([
 #define GNUPG_OPENPGP_REVOC_DIR "openpgp-revocs.d"
 #define GNUPG_CACHE_DIR         "cache.d"
 
-#define GNUPG_DEF_COPYRIGHT_LINE "Copyright (C) 2024 g10 Code GmbH"
+#define GNUPG_DEF_COPYRIGHT_LINE "Copyright (C) 2025 g10 Code GmbH"
 
 /* For some systems (DOS currently), we hardcode the path here.  For
    POSIX systems the values are constructed by the Makefiles, so that
@@ -592,9 +592,6 @@ AH_BOTTOM([
 
 /* Under Windows we use the gettext code from libgpg-error.  */
 #define GPG_ERR_ENABLE_GETTEXT_MACROS
-
-/* Under WindowsCE we use the strerror replacement from libgpg-error.  */
-#define GPG_ERR_ENABLE_ERRNO_MACROS
 
 #endif /*GNUPG_CONFIG_H_INCLUDED*/
 ])
@@ -1344,7 +1341,7 @@ fi
 AC_TYPE_SIZE_T
 AC_TYPE_MODE_T
 AC_CHECK_FUNCS([sigdescr_np])
-AC_CHECK_DECLS([sys_siglist],[],[],[#include <signal.h>
+AC_CHECK_DECLS([sys_siglist, _sys_siglist],[],[],[#include <signal.h>
 /* NetBSD declares sys_siglist in unistd.h.  */
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
@@ -1430,7 +1427,7 @@ fi
 AC_CHECK_TYPES([struct sigaction, sigset_t],,,[#include <signal.h>])
 
 # Dirmngr requires mmap on Unix systems.
-if test $ac_cv_func_mmap != yes -a $mmap_needed = yes; then
+if test $ac_cv_func_mmap != yes && test $mmap_needed = yes; then
   AC_MSG_ERROR([[Sorry, the current implementation requires mmap.]])
 fi
 
@@ -1614,7 +1611,8 @@ fi
 AC_SUBST(LIBTSS_LIBS)
 AC_SUBST(LIBTSS_CFLAGS)
 AM_CONDITIONAL(HAVE_LIBTSS, test "$have_libtss" != no)
-AM_CONDITIONAL(TEST_LIBTSS, test -n "$SWTPM" -o -n "$TPMSERVER" -a -n "$TSSSTARTUP")
+AM_CONDITIONAL(TEST_LIBTSS, [test -n "$SWTPM" \
+               || { test -n "$TPMSERVER" && test -n "$TSSSTARTUP"; }])
 AC_SUBST(HAVE_LIBTSS)
 
 #
@@ -1930,7 +1928,7 @@ AC_DEFINE_UNQUOTED(TPM2DAEMON_SOCK_NAME, "S.tpm2daemon",
 AC_DEFINE_UNQUOTED(DIRMNGR_SOCK_NAME, "S.dirmngr",
                    [The name of the dirmngr socket])
 AC_DEFINE_UNQUOTED(DIRMNGR_DEFAULT_KEYSERVER,
-                   "hkps://keyserver.ubuntu.com",
+                   "hkps://none",
       [The default keyserver for dirmngr to use, if none is explicitly given])
 
 AC_DEFINE_UNQUOTED(GPGEXT_GPG, "gpg", [The standard binary file suffix])
@@ -2149,7 +2147,7 @@ echo "
         TOFU support:        $use_tofu
         Tor support:         $show_tor_support
 "
-if test "$have_libtss" != no -a -z "$TPMSERVER" -a -z "$SWTPM"; then
+if test "$have_libtss" != no && test -z "$TPMSERVER" && test -z "$SWTPM"; then
 cat <<G10EOF
         Warning: TPM support is compiled in but no software TPM
                  for testing was discovered. TPM tests are disabled

@@ -63,6 +63,8 @@ struct mrsw_lock
   int notify_watchers;  /* Used only for W32 but let's define it always.  */
 };
 
+static npth_mutex_t new_card_lock;
+
 /* MRSW lock to protect the list of cards.
  *
  * This structure is used for serializing access to the list of cards
@@ -940,8 +942,6 @@ select_application (ctrl_t ctrl, const char *name,
   gpg_error_t err = 0;
   card_t card, card_prev = NULL;
 
-  card_list_w_lock ();
-
   ctrl->card_ctx = NULL;
 
   if (scan || !card_top)
@@ -949,11 +949,12 @@ select_application (ctrl_t ctrl, const char *name,
       struct dev_list *l;
       int new_card = 0;
 
+      npth_mutex_lock (&new_card_lock);
       /* Scan the devices to find new device(s).  */
       err = apdu_dev_list_start (opt.reader_port, &l);
       if (err)
         {
-          card_list_w_unlock ();
+          npth_mutex_unlock (&new_card_lock);
           return err;
         }
 
@@ -974,8 +975,10 @@ select_application (ctrl_t ctrl, const char *name,
             }
           else
             {
+              card_list_w_lock ();
               err = app_new_register (slot, ctrl, name,
                                       periodical_check_needed_this);
+              card_list_w_unlock ();
               new_card++;
             }
 
@@ -987,12 +990,14 @@ select_application (ctrl_t ctrl, const char *name,
         }
 
       apdu_dev_list_finish (l);
+      npth_mutex_unlock (&new_card_lock);
 
       /* If new device(s), kick the scdaemon loop.  */
       if (new_card)
         scd_kick_the_loop ();
     }
 
+  card_list_w_lock ();
   for (card = card_top; card; card = card->next)
     {
       lock_card (card, ctrl);
@@ -1039,7 +1044,6 @@ select_application (ctrl_t ctrl, const char *name,
     }
   else
     err = gpg_error (GPG_ERR_ENODEV);
-
   card_list_w_unlock ();
 
   return err;
@@ -2490,12 +2494,7 @@ report_change (int slot, int old_status, int cur_status)
   xfree (fname);
 
   homestr = make_filename (gnupg_homedir (), NULL);
-#ifdef HAVE_W32_SYSTEM
-  /* An environment block is terminated by two zero bytes.  */
-  if (gpgrt_asprintf (&envstr, "GNUPGHOME=%s%c", homestr, 0) < 0)
-#else
   if (gpgrt_asprintf (&envstr, "GNUPGHOME=%s", homestr) < 0)
-#endif
     log_error ("out of core while building environment\n");
   else
     {
@@ -2523,12 +2522,9 @@ report_change (int slot, int old_status, int cur_status)
       err = gpgrt_spawn_actions_new (&act);
       if (!err)
         {
-#ifdef HAVE_W32_SYSTEM
-          gpgrt_spawn_actions_set_envvars (act, envstr);
-#else
-          char *env[2] = { envstr, NULL };
-          gpgrt_spawn_actions_set_environ (act, env);
-#endif
+          const char *envchange[2] = { envstr, NULL };
+
+          gpgrt_spawn_actions_set_env_rev (act, envchange);
           err = gpgrt_process_spawn (fname, args, GPGRT_PROCESS_DETACHED,
                                      act, NULL);
           gpgrt_spawn_actions_release (act);
@@ -2632,6 +2628,13 @@ initialize_module_command (void)
 #ifndef HAVE_W32_SYSTEM
   int ret;
 #endif
+
+  if (npth_mutex_init (&new_card_lock, NULL))
+    {
+      err = gpg_error_from_syserror ();
+      log_error ("app: error initializing mutex: %s\n", gpg_strerror (err));
+      return err;
+    }
 
   card_list_lock.num_readers_active = 0;
   card_list_lock.num_writers_waiting = 0;
@@ -2749,7 +2752,7 @@ send_serialno_and_app_status (card_t card, int with_apps, ctrl_t ctrl)
 
 /* Common code for app_send_card_list and app_send_active_apps.  */
 static gpg_error_t
-send_card_and_app_list (ctrl_t ctrl, card_t wantcard, int with_apps)
+send_card_and_app_list (ctrl_t ctrl, int with_apps)
 {
   gpg_error_t err;
   card_t c;
@@ -2776,9 +2779,11 @@ send_card_and_app_list (ctrl_t ctrl, card_t wantcard, int with_apps)
 
   for (n=0; n < ncardlist; n++)
     {
-      if (wantcard && wantcard != cardlist[n])
-        continue;
-      err = send_serialno_and_app_status (cardlist[n], with_apps, ctrl);
+      card_t card = cardlist[n];
+
+      lock_card (card, ctrl);
+      err = send_serialno_and_app_status (card, with_apps, ctrl);
+      unlock_card (card);
       if (err)
         goto leave;
     }
@@ -2796,7 +2801,7 @@ send_card_and_app_list (ctrl_t ctrl, card_t wantcard, int with_apps)
 gpg_error_t
 app_send_card_list (ctrl_t ctrl)
 {
-  return send_card_and_app_list (ctrl, NULL, 0);
+  return send_card_and_app_list (ctrl, 0);
 }
 
 
@@ -2805,7 +2810,10 @@ app_send_card_list (ctrl_t ctrl)
 gpg_error_t
 app_send_active_apps (card_t card, ctrl_t ctrl)
 {
-  return send_card_and_app_list (ctrl, card, 1);
+  if (!card)
+    return send_card_and_app_list (ctrl, 1);
+  else
+    return send_serialno_and_app_status (card, 1, ctrl);
 }
 
 

@@ -212,7 +212,8 @@ parse_import_options(char *str,unsigned int *options,int noisy)
       /* New options.  Right now, without description string.  */
       {"ignore-attributes", IMPORT_IGNORE_ATTRIBUTES, NULL, NULL},
 
-      {"only-pubkeys", IMPORT_ONLY_PUBKEYS, NULL, NULL},
+      {"only-pubkeys", IMPORT_ONLY_PUBKEYS, NULL,
+       N_("do not import secret keys")},
 
       /* Hidden options which are enabled by default and are provided
        * in case of problems with the respective implementation.  */
@@ -1057,7 +1058,12 @@ read_block( IOBUF a, unsigned int options,
       switch (pkt->pkttype)
         {
         case PKT_COMPRESSED:
-          if (check_compress_algo (pkt->pkt.compressed->algorithm))
+          if (!(opt.compat_flags & COMPAT_COMPR_KEYS))
+            {
+              rc = GPG_ERR_UNEXPECTED_PACKET;
+              goto ready;
+            }
+          else if (check_compress_algo (pkt->pkt.compressed->algorithm))
             {
               rc = GPG_ERR_COMPR_ALGO;
               goto ready;
@@ -1463,6 +1469,8 @@ impex_filter_getval (void *cookie, const char *propname)
   /* We allow a prefix delimited by a slash to limit the scope of the
    * keyword.  Note that "pub" also includes "sec" and "sub" includes
    * "ssb".  */
+  if (DBG_RECSEL)  /* Printing the packet type is useful.  */
+    log_debug ("%s: pkttype=%s\n", __func__, pkttype_str (node->pkt->pkttype));
   if ((s=strchr (propname, '/')) && s != propname)
     {
       size_t n = s - propname;
@@ -1815,7 +1823,7 @@ insert_key_origin_uid (PKT_user_id *uid, u32 curtime,
       /* We insert origin information on a UID only when we received
        * them via the Web Key Directory or a DANE record.  The key we
        * receive here from the WKD has been filtered to contain only
-       * the user ID as looked up in the WKD.  For a DANE origin we
+       * the user ID as looked up in the WKD.  For a DANE origin
        * this should also be the case.  Thus we will see here only one
        * user id.  */
       uid->keyorg = origin;
@@ -1993,7 +2001,6 @@ import_one_real (ctrl_t ctrl,
   int mod_key = 0;
   int same_key = 0;
   int non_self_or_utk = 0;
-  size_t an;
   char pkstrbuf[PUBKEY_STRING_SIZE];
   int merge_keys_done = 0;
   int any_filter = 0;
@@ -2014,8 +2021,8 @@ import_one_real (ctrl_t ctrl,
   pk = node->pkt->pkt.public_key;
 
   fingerprint_from_pk (pk, fpr2, &fpr2len);
-  for (an = fpr2len; an < MAX_FINGERPRINT_LEN; an++)
-    fpr2[an] = 0;
+  if (MAX_FINGERPRINT_LEN > fpr2len)
+    memset (fpr2+fpr2len, 0, MAX_FINGERPRINT_LEN - fpr2len);
   keyid_from_pk( pk, keyid );
   uidnode = find_next_kbnode( keyblock, PKT_USER_ID );
 
@@ -2214,6 +2221,7 @@ import_one_real (ctrl_t ctrl,
 
   /* Do we have this key already in one of our pubrings ? */
   err = get_keyblock_byfpr_fast (ctrl, &keyblock_orig, &hd,
+                                 1 /*primary only */,
                                  fpr2, fpr2len, 1/*locked*/);
   if ((err
        && gpg_err_code (err) != GPG_ERR_NO_PUBKEY
@@ -2226,7 +2234,7 @@ import_one_real (ctrl_t ctrl,
         log_error (_("key %s: public key not found: %s\n"),
                    keystr(keyid), gpg_strerror (err));
     }
-  else if (err && (opt.import_options&IMPORT_MERGE_ONLY) )
+  else if (err && ((opt.import_options|options)&IMPORT_MERGE_ONLY) )
     {
       if (opt.verbose && !silent )
         log_info( _("key %s: new key - skipped\n"), keystr(keyid));
@@ -2272,7 +2280,7 @@ import_one_real (ctrl_t ctrl,
             }
         }
 
-      err = keydb_insert_keyblock (hd, keyblock );
+      err = keydb_insert_keyblock (hd, keyblock);
       if (err)
         log_error (_("error writing keyring '%s': %s\n"),
                    keydb_get_resource_name (hd), gpg_strerror (err));
@@ -3358,6 +3366,33 @@ import_secret_one (ctrl_t ctrl, kbnode_t keyblock,
 }
 
 
+/* Return a string for the revocation reason CODE.  R_FREEM must be an
+ * possibly unintialized ptr which should be freed by the caller after
+ * the return value has been consumed.  */
+const char *
+revocation_reason_code_to_str (int code, char **freeme)
+{
+  /* Take care: get_revocation_reason has knowledge of the internal
+   * working of this fucntion.  */
+  const char *result;
+
+  *freeme = NULL;
+  switch (code)
+    {
+    case 0x00: result = _("No reason specified"); break;
+    case 0x01: result = _("Key is superseded");   break;
+    case 0x02: result = _("Key has been compromised"); break;
+    case 0x03: result = _("Key is no longer used"); break;
+    case 0x20: result = _("User ID is no longer valid"); break;
+    default:
+      *freeme = xasprintf ("code=%02x", code);
+      result = *freeme;
+      break;
+    }
+
+  return result;
+}
+
 
 /* Return the recocation reason from signature SIG.  If no revocation
  * reason is available 0 is returned, in other cases the reason
@@ -3375,9 +3410,9 @@ get_revocation_reason (PKT_signature *sig, char **r_reason,
   int reason_seq = 0;
   size_t reason_n;
   const byte *reason_p;
-  char reason_code_buf[20];
-  const char *reason_text = NULL;
   int reason_code = 0;
+  const char *reason_string;
+  char *freeme;
 
   if (r_reason)
     *r_reason = NULL;
@@ -3389,26 +3424,17 @@ get_revocation_reason (PKT_signature *sig, char **r_reason,
                                       &reason_n, &reason_seq, NULL))
          && !reason_n)
     ;
-  if (reason_p)
+  if (reason_p && reason_n)
     {
       reason_code = *reason_p;
       reason_n--; reason_p++;
-      switch (reason_code)
-        {
-        case 0x00: reason_text = _("No reason specified"); break;
-        case 0x01: reason_text = _("Key is superseded");   break;
-        case 0x02: reason_text = _("Key has been compromised"); break;
-        case 0x03: reason_text = _("Key is no longer used"); break;
-        case 0x20: reason_text = _("User ID is no longer valid"); break;
-        default:
-          snprintf (reason_code_buf, sizeof reason_code_buf,
-                    "code=%02x", reason_code);
-          reason_text = reason_code_buf;
-          break;
-        }
-
-      if (r_reason)
-        *r_reason = xstrdup (reason_text);
+      reason_string = revocation_reason_code_to_str (reason_code, &freeme);
+      if (r_reason && freeme)
+        *r_reason = freeme;
+      else if (r_reason && reason_string)
+        *r_reason = xstrdup (reason_string);
+      else
+        xfree (freeme);
 
       if (r_comment && reason_n)
         {
@@ -3515,7 +3541,9 @@ list_standalone_revocation (ctrl_t ctrl, PKT_signature *sig, int sigrc)
         show_notation (sig, 3, 0,
                        ((opt.list_options & LIST_SHOW_STD_NOTATIONS) ? 1 : 0)
                        +
-                       ((opt.list_options & LIST_SHOW_USER_NOTATIONS) ? 2 : 0));
+                       ((opt.list_options & LIST_SHOW_USER_NOTATIONS) ? 2 : 0)
+                       +
+                       ((opt.list_options & LIST_SHOW_HIDDEN_NOTATIONS) ? 4:0));
 
       if (sig->flags.pref_ks
           && (opt.list_options & LIST_SHOW_KEYSERVER_URLS))
@@ -3525,31 +3553,7 @@ list_standalone_revocation (ctrl_t ctrl, PKT_signature *sig, int sigrc)
         {
           es_fprintf (es_stdout, "      %s%s\n",
                       _("reason for revocation: "), reason_text);
-          if (reason_comment)
-            {
-              const byte *s, *s_lf;
-              size_t n, n_lf;
-
-              s = reason_comment;
-              n = reason_commentlen;
-              s_lf = NULL;
-              do
-                {
-                  /* We don't want any empty lines, so we skip them.  */
-                  for (;n && *s == '\n'; s++, n--)
-                    ;
-                  if (n)
-                    {
-                      s_lf = memchr (s, '\n', n);
-                      n_lf = s_lf? s_lf - s : n;
-                      es_fprintf (es_stdout, "         %s",
-                                  _("revocation comment: "));
-                      es_write_sanitized (es_stdout, s, n_lf, NULL, NULL);
-                      es_putc ('\n', es_stdout);
-                      s += n_lf; n -= n_lf;
-                    }
-                } while (s_lf);
-            }
+          print_revocation_reason_comment (reason_comment, reason_commentlen);
         }
     }
 
@@ -3611,6 +3615,13 @@ import_revoke_cert (ctrl_t ctrl, kbnode_t node, unsigned int options,
   if (!hd)
     {
       rc = gpg_error_from_syserror ();
+      goto leave;
+    }
+
+  rc = keydb_lock (hd);
+  if (rc)
+    {
+      keydb_release (hd);
       goto leave;
     }
 

@@ -2673,6 +2673,30 @@ agent_genkey (ctrl_t ctrl, char **cache_nonce_addr, char **passwd_nonce_addr,
 }
 
 
+/* Add the Link attribute to both given keys.  */
+gpg_error_t
+agent_crosslink_keys (ctrl_t ctrl, const char *hexgrip1, const char *hexgrip2)
+{
+  gpg_error_t err;
+  char line[ASSUAN_LINELENGTH];
+
+  err = start_agent (ctrl, 0);
+  if (err)
+    goto leave;
+
+  snprintf (line, sizeof line, "KEYATTR %s Link: %s", hexgrip1, hexgrip2);
+  err = assuan_transact (agent_ctx, line, NULL, NULL, NULL, NULL, NULL, NULL);
+  if (err)
+    goto leave;
+
+  snprintf (line, sizeof line, "KEYATTR %s Link: %s", hexgrip2, hexgrip1);
+  err = assuan_transact (agent_ctx, line, NULL, NULL, NULL, NULL, NULL, NULL);
+
+ leave:
+  return err;
+}
+
+
 
 /* Call the agent to read the public key part for a given keygrip.
  * Values from FROMCARD:
@@ -2885,6 +2909,7 @@ agent_pkdecrypt (ctrl_t ctrl, const char *keygrip, const char *desc,
   char *p, *buf, *endp;
   const char *keygrip2 = NULL;
   struct default_inq_parm_s dfltparm;
+  const char *cmdline;
 
   memset (&dfltparm, 0, sizeof dfltparm);
   dfltparm.ctrl = ctrl;
@@ -2911,6 +2936,12 @@ agent_pkdecrypt (ctrl_t ctrl, const char *keygrip, const char *desc,
         return gpg_error (GPG_ERR_INV_VALUE);
     }
 
+  if (*keygrip2)
+    cmdline = "PKDECRYPT --kem=PQC-PGP";
+  else if (pubkey_algo  == PUBKEY_ALGO_ECDH)
+    cmdline = "PKDECRYPT --kem=PGP";
+  else
+    cmdline = "PKDECRYPT";
 
   err = start_agent (ctrl, 0);
   if (err)
@@ -2953,8 +2984,7 @@ agent_pkdecrypt (ctrl_t ctrl, const char *keygrip, const char *desc,
     err = make_canon_sexp (s_ciphertext, &parm.ciphertext, &parm.ciphertextlen);
     if (err)
       return err;
-    err = assuan_transact (agent_ctx,
-                           *keygrip2? "PKDECRYPT --kem=PQC-PGP":"PKDECRYPT",
+    err = assuan_transact (agent_ctx, cmdline,
                            put_membuf_cb, &data,
                            inq_ciphertext_cb, &parm,
                            padding_info_cb, r_padding);

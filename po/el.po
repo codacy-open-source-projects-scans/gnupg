@@ -541,6 +541,10 @@ msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "ο gpg-agent δεν είναι διαθέσιμος σε αυτή τη συνεδρία\n"
 
 #, fuzzy, c-format
+msgid "socket file removed - retrying binding\n"
+msgstr "κλειδί %08lX: αφαιρέθηκε η δέσμευση πολλαπλού υποκλειδιού\n"
+
+#, fuzzy, c-format
 msgid "error getting nonce for the socket\n"
 msgstr "σφάλμα στη δημιουργία της φράσης κλειδί: %s\n"
 
@@ -767,6 +771,10 @@ msgstr "αλλαγή της φράσης κλειδί"
 
 msgid "I'll change it later"
 msgstr ""
+
+#, fuzzy, c-format
+msgid "Unprotecting key failed: %s\n"
+msgstr "διαγραφή block κλειδιών απέτυχε: %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr ""
@@ -1437,6 +1445,13 @@ msgstr ""
 msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr ""
 
+#, c-format
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr ""
 
@@ -1595,13 +1610,6 @@ msgstr "παραλείφθηκε: μυστικό κλειδί ήδη παρών\
 msgid "Replace existing keys? (y/N) "
 msgstr ""
 
-#, c-format
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-
 #, fuzzy
 msgid "Please select the type of key to generate:\n"
 msgstr "Παρακαλώ επιλέξτε τον τύπο του κλειδιού που θέλετε:\n"
@@ -1739,7 +1747,7 @@ msgid "Invalid command  (try \"help\")\n"
 msgstr "Μη έγκυρη εντολή  (δοκιμάστε \"help\")\n"
 
 #, fuzzy, c-format
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "Η δημιουργία κλειδιού απέτυχε: %s\n"
 
 #, fuzzy
@@ -1907,6 +1915,11 @@ msgstr "(Δεν δώθηκε περιγραφή)\n"
 #| msgid "you may not use %s while in %s mode\n"
 msgid "option '%s' may not be used in %s mode\n"
 msgstr "απαγορεύετε η χρήση του %s στην κατάσταση %s.\n"
+
+#, fuzzy, c-format
+#| msgid "can't connect to `%s': %s\n"
+msgid "already encrypted to %08lX\n"
+msgstr "αδυναμία σύνδεσης στο `%s': %s\n"
 
 #, fuzzy, c-format
 #| msgid "%s encrypted data\n"
@@ -2126,6 +2139,10 @@ msgstr "υπογραφή ενός κλειδιού"
 #| msgid "sign a key locally"
 msgid "quickly sign a key locally"
 msgstr "υπογραφή ενός κλειδιού τοπικά"
+
+#, fuzzy
+msgid "quickly sign a key with a trust signature"
+msgstr "Συμβουλή: Επιλέξτε το user ID για υπογραφή\n"
 
 #, fuzzy
 #| msgid "generate a new key pair"
@@ -2458,6 +2475,11 @@ msgstr "ορισμός απεικόνισης επιλογών"
 #| msgid "change the ownertrust"
 msgid "show ownertrust"
 msgstr "αλλαγή της εμπιστοσύνης ιδιοκτήτη"
+
+#, fuzzy
+#| msgid "Critical signature notation: "
+msgid "show trust signature information"
+msgstr "Σημείωση κρίσιμης υπογραφής: "
 
 #, fuzzy, c-format
 msgid "unknown TOFU policy '%s'\n"
@@ -2801,6 +2823,9 @@ msgstr "|FD|εγγραφή των πληροφοριών κατάστασης σ
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr ""
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr ""
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "Χρήση: gpgv [επιλογές] [αρχεία] (-h για βοήθεια)"
 
@@ -2869,6 +2894,11 @@ msgstr ""
 #, fuzzy
 msgid "repair keys on import"
 msgstr "απεικόνιση του fingerprint"
+
+#, fuzzy
+#| msgid "list secret keys"
+msgid "do not import secret keys"
+msgstr "απεικόνιση της λίστας μυστικών κλειδιών"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -3132,10 +3162,6 @@ msgstr "Το User ID δεν είναι πλέον έγκυρο"
 #, c-format
 msgid "reason for revocation: "
 msgstr "αιτία για ανάκληση:"
-
-#, c-format
-msgid "revocation comment: "
-msgstr "σχόλιο ανάκλησης:"
 
 #, fuzzy, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -3895,6 +3921,11 @@ msgid "Nothing to sign.\n"
 msgstr "Τίποτα για να υπογραφεί με το κλειδί  %08lX\n"
 
 #, fuzzy, c-format
+#| msgid "checking created signature failed: %s\n"
+msgid "creating key signature failed: %s\n"
+msgstr "απέτυχε ο έλεγχος της υπογραφής που δημιουργήθηκε: %s\n"
+
+#, fuzzy, c-format
 msgid "Not signed by you.\n"
 msgstr "   υπογράφθηκε από %08lX στις %s%s\n"
 
@@ -4446,6 +4477,10 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) RSA (για κρυπτογράφηση μόνο)\n"
 
 #, fuzzy, c-format
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "   (%d) DSA και ElGamal (προκαθορισμένο)\n"
+
+#, fuzzy, c-format
 #| msgid "   (%d) RSA (encrypt only)\n"
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) RSA (για κρυπτογράφηση μόνο)\n"
@@ -4494,6 +4529,11 @@ msgstr "Το μέγεθος κλειδιού που ζητήθηκε είναι 
 #, fuzzy
 #| msgid "Please select what kind of key you want:\n"
 msgid "Please select which elliptic curve you want:\n"
+msgstr "Παρακαλώ επιλέξτε τον τύπο του κλειδιού που θέλετε:\n"
+
+#, fuzzy, c-format
+#| msgid "Please select what kind of key you want:\n"
+msgid "Please select the %s variant you want:\n"
 msgstr "Παρακαλώ επιλέξτε τον τύπο του κλειδιού που θέλετε:\n"
 
 msgid ""
@@ -4722,6 +4762,12 @@ msgstr "αδυναμία δημιουργίας του `%s': %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "ΣΗΜΕΙΩΣΗ: το μυστικό κλειδί %08lX έληξε στις %s\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+
 #, fuzzy, c-format
 #| msgid "writing public key to `%s'\n"
 msgid "writing public key to '%s'\n"
@@ -4840,6 +4886,10 @@ msgstr[1] ""
 msgid "Keyring"
 msgstr "Κλειδοθήκη"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "σχόλιο ανάκλησης:"
+
 msgid "Revocable by: "
 msgstr ""
 
@@ -4914,6 +4964,9 @@ msgstr ""
 msgid "honor the preferred keyserver URL set on the key"
 msgstr "το URL πολιτικής υπογραφής που δόθηκε δεν είναι έγκυρο\n"
 
+msgid "update a key before sending it"
+msgstr ""
+
 #, fuzzy
 msgid "disabled"
 msgstr "disable"
@@ -4928,6 +4981,10 @@ msgstr "μη έγκυρες επιλογές εξαγωγής\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr ""
+
+#, fuzzy, c-format
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "σφάλμα: μη έγκυρο αποτύπωμα\n"
 
 #, fuzzy, c-format
 msgid "refreshing %d key from %s\n"
@@ -4954,6 +5011,10 @@ msgstr "αίτηση κλειδιού %08lX από το %s\n"
 #, fuzzy, c-format
 msgid "no keyserver known\n"
 msgstr "μη έγκυρες επιλογές εξαγωγής\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr ""
 
 #, fuzzy, c-format
 msgid "skipped \"%s\": %s\n"
@@ -5295,6 +5356,11 @@ msgstr "Ασυμπίεστο"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "αυτό το μήνυμα ίσως δεν μπορεί να χρησιμοποιηθεί από %s\n"
+
+#, fuzzy
+#| msgid "enable"
+msgid "enabled"
+msgstr "enable"
 
 #, fuzzy, c-format
 msgid "ambiguous option '%s'\n"
@@ -5809,6 +5875,12 @@ msgstr "κλειδί %08lX: δεν υπάρχει αυτό το user ID\n"
 #, c-format
 msgid "okay, we are the anonymous recipient.\n"
 msgstr "εντάξει, είμαστε ο ανώνυμος παραλήπτης.\n"
+
+#, fuzzy, c-format
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr ""
+"ΠΡΟΕΙΔΟΠΟΙΗΣΗ: το υπογράφων υποκλειδί %08lX δεν έχει κατ' αντιπαράσταση "
+"πιστοποιηθεί\n"
 
 #, c-format
 msgid "old encoding of the DEK is not supported\n"
@@ -6676,14 +6748,19 @@ msgid_plural " (%d validity counts cleared)\n"
 msgstr[0] "%d κλειδιά επεξεργάστηκαν (%d μετρήσεις εγγυρότητας πέρασαν)\n"
 msgstr[1] "%d κλειδιά επεξεργάστηκαν (%d μετρήσεις εγγυρότητας πέρασαν)\n"
 
-#, c-format
-msgid "no ultimately trusted keys found\n"
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s not found\n"
 msgstr "δε βρέθηκαν απόλυτα εμπιστεύσιμα κλειδιά\n"
 
 #, fuzzy, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr ""
-"δε βρέθηκε το δημόσιο κλειδί του απόλυτα εμπιστεύσιμου κλειδιού %08lX\n"
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s expired\n"
+msgstr "δε βρέθηκαν απόλυτα εμπιστεύσιμα κλειδιά\n"
+
+#, c-format
+msgid "no ultimately trusted keys found\n"
+msgstr "δε βρέθηκαν απόλυτα εμπιστεύσιμα κλειδιά\n"
 
 #, c-format
 msgid ""
@@ -7859,9 +7936,9 @@ msgstr "σφάλμα κατά την ανάγνωση του `%s': %s\n"
 msgid "Error - "
 msgstr ""
 
-#, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr ""
+#, fuzzy, c-format
+msgid "error writing to output: %s\n"
+msgstr "αδυναμία εγγραφής της κλειδοθήκης `%s': %s\n"
 
 #, fuzzy, c-format
 msgid "invalid formatted fingerprint in '%s', line %d\n"
@@ -9359,6 +9436,11 @@ msgid "manage the command history"
 msgstr ""
 
 #, fuzzy, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr ""
+#~ "δε βρέθηκε το δημόσιο κλειδί του απόλυτα εμπιστεύσιμου κλειδιού %08lX\n"
+
+#, fuzzy, c-format
 #~ msgid "waiting for process to terminate failed: ec=%d\n"
 #~ msgstr "η ενημέρωση απέτυχε: %s\n"
 
@@ -9610,10 +9692,6 @@ msgstr ""
 
 #~ msgid "unable to read external program response: %s\n"
 #~ msgstr "αδυναμία ανάγνωσης της απάντησης του εξωτερικού προγράμματος: %s\n"
-
-#, fuzzy
-#~ msgid "   (%d) ECC and ECC\n"
-#~ msgstr "   (%d) DSA και ElGamal (προκαθορισμένο)\n"
 
 #, fuzzy
 #~ msgid "run without asking a user"
@@ -11176,9 +11254,6 @@ msgstr ""
 
 #~ msgid "disable"
 #~ msgstr "disable"
-
-#~ msgid "enable"
-#~ msgstr "enable"
 
 #~ msgid "showphoto"
 #~ msgstr "showphoto"

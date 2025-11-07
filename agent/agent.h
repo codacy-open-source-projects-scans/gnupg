@@ -569,7 +569,6 @@ enum kemids
 
 gpg_error_t agent_kem_decrypt (ctrl_t ctrl, const char *desc_text, int kemid,
                                const unsigned char *ct, size_t ctlen,
-                               const unsigned char *option, size_t optionlen,
                                membuf_t *outbuf);
 
 /*-- genkey.c --*/
@@ -655,6 +654,9 @@ int divert_tpm2_pkdecrypt (ctrl_t ctrl,
                            char **r_buf, size_t *r_len, int *r_padding);
 int divert_tpm2_writekey (ctrl_t ctrl, const unsigned char *grip,
                           gcry_sexp_t s_skey);
+int agent_tpm2d_ecc_kem (ctrl_t ctrl, const unsigned char *shadow_info,
+                         const unsigned char *ecc_ct,
+                         size_t ecc_point_len, unsigned char *ecc_ecdh);
 #else /*!HAVE_LIBTSS*/
 static inline int
 divert_tpm2_pksign (ctrl_t ctrl,
@@ -684,6 +686,16 @@ divert_tpm2_writekey (ctrl_t ctrl, const unsigned char *grip,
                       gcry_sexp_t s_skey)
 {
   (void)ctrl; (void)grip; (void)s_skey;
+  return gpg_error (GPG_ERR_NOT_SUPPORTED);
+}
+
+static inline int
+agent_tpm2d_ecc_kem (ctrl_t ctrl, const unsigned char *shadow_info,
+                     const unsigned char *ecc_ct,
+                     size_t ecc_point_len, unsigned char *ecc_ecdh)
+{
+  (void)ctrl; (void)ecc_ct;
+  (void)ecc_point_len; (void)ecc_ecdh;
   return gpg_error (GPG_ERR_NOT_SUPPORTED);
 }
 #endif /*!HAVE_LIBTSS*/
@@ -731,7 +743,7 @@ int agent_tpm2d_pkdecrypt (ctrl_t ctrl, const unsigned char *cipher,
 			   char **r_buf, size_t *r_len);
 
 /*-- call-scd.c --*/
-int agent_card_learn (ctrl_t ctrl,
+int agent_card_learn (ctrl_t ctrl, const char *demand_sn,
                       void (*kpinfo_cb)(void*, const char *),
                       void *kpinfo_cb_arg,
                       void (*certinfo_cb)(void*, const char *),
@@ -756,7 +768,8 @@ int agent_card_pkdecrypt (ctrl_t ctrl,
                           void *getpin_cb_arg,
                           const char *desc_text,
                           const unsigned char *indata, size_t indatalen,
-                          char **r_buf, size_t *r_buflen, int *r_padding);
+                          unsigned char **r_buf, size_t *r_buflen,
+                          int *r_padding);
 
 int agent_card_readcert (ctrl_t ctrl,
                          const char *id, char **r_buf, size_t *r_buflen);
@@ -780,7 +793,8 @@ gpg_error_t agent_card_keyinfo (ctrl_t ctrl, const char *keygrip,
                                 int cap, struct card_key_info_s **result);
 
 /*-- learncard.c --*/
-int agent_handle_learn (ctrl_t ctrl, int send, void *assuan_context, int force);
+int agent_handle_learn (ctrl_t ctrl, int send, void *assuan_context,
+                        int force, const char *demand_sn);
 
 
 /*-- cvt-openpgp.c --*/

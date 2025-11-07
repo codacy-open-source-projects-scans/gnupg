@@ -132,6 +132,8 @@ parse_and_set_list_filter (const char *string)
     err = recsel_parse_expr (&list_filter.selkey, string+7);
   else
     err = gpg_error (GPG_ERR_INV_NAME);
+  if (!err && DBG_RECSEL)
+    recsel_dump (list_filter.selkey);
 
   return err;
 }
@@ -365,11 +367,12 @@ print_card_key_info (estream_t fp, kbnode_t keyblock)
  *  -1 - print to the TTY
  *   0 - print to stdout.
  *   1 - use log_info
+ *   2 - print colon delimited pfc record to stdout.
  */
 void
 show_preferences (PKT_user_id *uid, int indent, int mode, int verbose)
 {
-  estream_t fp = mode < 0? NULL : mode ? log_get_stream () : es_stdout;
+  estream_t fp;
   const prefitem_t fake = { 0, 0 };
   const prefitem_t *prefs;
   int i;
@@ -384,7 +387,44 @@ show_preferences (PKT_user_id *uid, int indent, int mode, int verbose)
   else
     return;
 
-  if (verbose)
+  if (mode < 0 )
+    fp = NULL;
+  else if (mode == 1)
+    fp = log_get_stream ();
+  else /* Mode 0 or 2 */
+    fp = es_stdout;
+
+  if (mode == 2)  /* Print preference record.  */
+    {
+      static char ptypes[] = { PREFTYPE_SYM, PREFTYPE_HASH,
+                               PREFTYPE_ZIP, PREFTYPE_AEAD };
+      int t, any;
+
+      es_fputs ("pfc::", fp); /* Second field is RFU */
+      for (t=0; t < DIM (ptypes); t++)
+        {
+          any = 0;
+          for (i = 0; prefs[i].type; i++)
+            if (prefs[i].type == ptypes[t])
+              {
+                es_fprintf (fp, "%s%d", any? ",":"", prefs[i].value);
+                any = 1;
+              }
+          es_putc (':', fp);
+        }
+      es_putc (':', fp);  /* Two more reserved fields.  */
+      es_putc (':', fp);
+      any = 0;
+      if (uid->flags.mdc)
+        { es_fprintf (fp, "mdc"); any = 1; }
+      if (uid->flags.aead)
+        { es_fprintf (fp, "%saead", any?",":"");  any = 1; };
+      if (!uid->flags.ks_modify)
+        { es_fprintf (fp, "%sno-ks-modify", any?",":""); }
+      es_putc (':', fp); /* One final colon for easier reading.  */
+      es_putc ('\n', fp);
+    }
+  else if (verbose)
     {
       int any, des_seen = 0, sha1_seen = 0, uncomp_seen = 0;
 
@@ -636,6 +676,7 @@ show_keyserver_url (PKT_signature * sig, int indent, int mode)
  * Defined bits in WHICH:
  *   1 - standard notations
  *   2 - user notations
+ *   4 - print notations normally hidden
  */
 void
 show_notation (PKT_signature * sig, int indent, int mode, int which)
@@ -651,6 +692,9 @@ show_notation (PKT_signature * sig, int indent, int mode, int which)
   /* There may be multiple notations in the same sig. */
   for (nd = notations; nd; nd = nd->next)
     {
+       if (!(which & 4) && !strcmp (nd->name, "manu"))
+        continue;
+
       if (mode != 2)
 	{
 	  int has_at = !!strchr (nd->name, '@');
@@ -697,6 +741,41 @@ show_notation (PKT_signature * sig, int indent, int mode, int which)
             write_status_buffer (STATUS_NOTATION_DATA,
                                  nd->value, strlen (nd->value), 50);
 	}
+    }
+
+  free_notation (notations);
+}
+
+
+/* Output all the notation data in SIG matching a name given by
+ * --print-notation to stdout.  */
+void
+print_matching_notations (PKT_signature *sig)
+{
+  notation_t nd, notations;
+  strlist_t sl;
+  const char *s;
+
+  if (!opt.print_notations)
+    return;
+
+  notations = sig_to_notation (sig);
+  for (nd = notations; nd; nd = nd->next)
+    {
+      for (sl=opt.print_notations; sl; sl = sl->next)
+        if (!strcmp (sl->d, nd->name))
+          break;
+      if (!sl || !*nd->value)
+        continue;
+      es_fprintf (es_stdout, "%s: ", nd->name);
+      for (s = nd->value; *s; s++)
+        {
+          if (*s == '\n')
+            es_fprintf (es_stdout, "\n%*s", (int)strlen (nd->name)+2, "");
+          else if (*s >= ' ' || *s != '\t')
+            es_putc (*s, es_stdout);
+        }
+      es_putc ('\n', es_stdout);
     }
 
   free_notation (notations);
@@ -1291,6 +1370,89 @@ cmp_signodes (const void *av, const void *bv)
 }
 
 
+/* Given a domain name at NAME with length NAME, check whether this is
+ * a valid domain name and in that case return a malloced string ith
+ * the name.  Escaped dots are ignored and removed from the result.
+ * Example: "example\.org" -> "example.org" Note that the input may
+ * not be Nul terminated.  */
+static char *
+parse_trust_name (const char *name, size_t namelen)
+{
+  char *buffer, *p;
+
+  p = buffer = xtrymalloc (namelen+1);
+  if (!buffer)
+    return NULL; /* Oops - caller needs to use some fallback  */
+
+  for (;  namelen; name++, namelen--)
+    {
+      if (*name == '\\' && namelen > 1 && name[1] == '.')
+        ; /* Skip the escape character.  */
+      else
+        *p++ = *name;
+    }
+  *p = 0;
+  if (!is_valid_domain_name (buffer))
+    {
+      xfree (buffer);
+      buffer = NULL;
+    }
+  return buffer;
+}
+
+
+void
+print_revocation_reason_comment (const char *comment, size_t comment_len)
+{
+  const byte *s, *s_lf;
+  size_t n, n_lf;
+
+  if (!comment || !comment_len)
+    return;
+
+  s = comment;
+  n = comment_len;
+  s_lf = NULL;
+  do
+    {
+      /* We don't want any empty lines, so we skip them.  */
+      for (;n && *s == '\n'; s++, n--)
+        ;
+      if (n)
+        {
+          s_lf = memchr (s, '\n', n);
+          n_lf = s_lf? s_lf - s : n;
+          es_fprintf (es_stdout, "         %s",
+                      _("revocation comment: "));
+          es_write_sanitized (es_stdout, s, n_lf, NULL, NULL);
+          es_putc ('\n', es_stdout);
+          s += n_lf; n -= n_lf;
+        }
+    } while (s_lf);
+}
+
+
+static void
+print_revocation_reason (PKT_public_key *pk)
+{
+  char *freeme;
+  const char *codestr;
+
+  if (!pk->revoked.got_reason)
+    return;
+
+  if (!pk->revoked.reason_code && !pk->revoked.reason_comment)
+    return; /* Do not print "revocation reason: No reason specified". */
+
+  codestr = revocation_reason_code_to_str (pk->revoked.reason_code, &freeme);
+  es_fprintf (es_stdout, "      %s%s\n",
+              _("reason for revocation: "), codestr);
+  xfree (freeme);
+  print_revocation_reason_comment (pk->revoked.reason_comment,
+                                   pk->revoked.reason_comment_len);
+}
+
+
 /* Helper for list_keyblock_print.  The caller must have set
  * NODFLG_MARK_B to indicate self-signatures.  */
 static void
@@ -1403,6 +1565,31 @@ list_signature_print (ctrl_t ctrl, kbnode_t keyblock, kbnode_t node,
       print_utf8_buffer (es_stdout, p, n);
       xfree (p);
     }
+  if ((opt.list_options & LIST_SHOW_TRUSTSIG)
+      && (sig->trust_depth || sig->trust_value || sig->trust_regexp))
+    {
+      es_fprintf (es_stdout, " [T=%d,%d", sig->trust_depth, sig->trust_value);
+      if (sig->trust_regexp)
+        {
+          size_t n = strlen (sig->trust_regexp);
+          char *tname = NULL;
+
+          if (!strncmp (sig->trust_regexp, "<[^>]+[@.]", 10)
+              && n > 12 && !strcmp (sig->trust_regexp+n-2, ">$")
+              && (tname=parse_trust_name (sig->trust_regexp+10, n-12)))
+            {
+              es_fprintf (es_stdout, ",\"%s", tname);
+              xfree (tname);
+            }
+          else
+            {
+              es_fputs (",R\"", es_stdout);
+              es_write_sanitized (es_stdout, sig->trust_regexp, n, "\"", NULL);
+            }
+          es_putc ('\"', es_stdout);
+        }
+      es_putc (']', es_stdout);
+    }
   es_putc ('\n', es_stdout);
 
   if (sig->flags.policy_url
@@ -1412,11 +1599,11 @@ list_signature_print (ctrl_t ctrl, kbnode_t keyblock, kbnode_t node,
   if (sig->flags.notation && (opt.list_options & LIST_SHOW_NOTATIONS))
     show_notation (sig, 3, 0,
                    ((opt.
-                     list_options & LIST_SHOW_STD_NOTATIONS) ? 1 : 0)
-                   +
-                     ((opt.
-                       list_options & LIST_SHOW_USER_NOTATIONS) ? 2 :
-                      0));
+                     list_options & LIST_SHOW_STD_NOTATIONS) ? 1 : 0) +
+                   ((opt.
+                     list_options & LIST_SHOW_USER_NOTATIONS) ? 2 : 0) +
+                   ((opt.
+                     list_options & LIST_SHOW_HIDDEN_NOTATIONS) ? 4 : 0));
 
   if (sig->flags.notation
       && (opt.list_options
@@ -1444,31 +1631,7 @@ list_signature_print (ctrl_t ctrl, kbnode_t keyblock, kbnode_t node,
     {
       es_fprintf (es_stdout, "      %s%s\n",
                   _("reason for revocation: "), reason_text);
-      if (reason_comment)
-        {
-          const byte *s, *s_lf;
-          size_t n, n_lf;
-
-          s = reason_comment;
-          n = reason_commentlen;
-          s_lf = NULL;
-          do
-            {
-              /* We don't want any empty lines, so we skip them.  */
-              for (;n && *s == '\n'; s++, n--)
-                ;
-              if (n)
-                {
-                  s_lf = memchr (s, '\n', n);
-                  n_lf = s_lf? s_lf - s : n;
-                  es_fprintf (es_stdout, "         %s",
-                              _("revocation comment: "));
-                  es_write_sanitized (es_stdout, s, n_lf, NULL, NULL);
-                  es_putc ('\n', es_stdout);
-                  s += n_lf; n -= n_lf;
-                }
-            } while (s_lf);
-        }
+      print_revocation_reason_comment (reason_comment, reason_commentlen);
     }
 
   xfree (reason_text);
@@ -1767,7 +1930,8 @@ list_keyblock_simple (ctrl_t ctrl, kbnode_t keyblock)
 	  if (uid->attrib_data)
 	    continue;
 
-	  if (uid->flags.expired || uid->flags.revoked)
+	  if ((uid->flags.expired || uid->flags.revoked)
+              && !(opt.list_options & LIST_SHOW_UNUSABLE_UIDS))
             continue;
 
           mbox = mailbox_from_userid (uid->name, 0);
@@ -1882,6 +2046,7 @@ list_keyblock_colon (ctrl_t ctrl, kbnode_t keyblock,
   unsigned int keylength;
   char *curve = NULL;
   const char *curvename = NULL;
+  char pkstrbuf[PUBKEY_STRING_SIZE];
 
   /* Get the keyid from the keyblock.  */
   node = find_kbnode (keyblock, PKT_PUBLIC_KEY);
@@ -1971,6 +2136,14 @@ list_keyblock_colon (ctrl_t ctrl, kbnode_t keyblock,
         curvename = curve;
       es_fputs (curvename, es_stdout);
     }
+  else if (pk->pubkey_algo == PUBKEY_ALGO_KYBER)
+    {
+      /* Note that Kyber should actually not appear here because it is
+       * the primary key and Kyber is not able to certify.  But we
+       * prepare it here for future composite algorithms and in case
+       * of faulty packets. */
+      es_fputs (pubkey_string (pk, pkstrbuf, sizeof pkstrbuf), es_stdout);
+    }
   es_putc (':', es_stdout);		/* End of field 17. */
   print_compliance_flags (pk, keylength, curvename);
   es_putc (':', es_stdout);		/* End of field 18 (compliance). */
@@ -1982,6 +2155,26 @@ list_keyblock_colon (ctrl_t ctrl, kbnode_t keyblock,
     es_write_sanitized (es_stdout, pk->updateurl, strlen (pk->updateurl),
                         ":", NULL);
   es_putc (':', es_stdout);		/* End of field 20 (origin). */
+  if (pk->flags.revoked && pk->revoked.got_reason
+      && (pk->revoked.reason_code || pk->revoked.reason_comment))
+    {
+      char *freeme;
+      const char *s;
+      size_t n;
+
+      s = revocation_reason_code_to_str (pk->revoked.reason_code, &freeme);
+      n = strlen (s);
+      es_write_sanitized (es_stdout, s, n, ":", NULL);
+      if (n && s[n-1] != '.')
+        es_putc ('.', es_stdout);
+      es_putc ('\\', es_stdout);  /* C-style escaped colon.  */
+      es_putc ('n', es_stdout);
+      es_write_sanitized (es_stdout, pk->revoked.reason_comment,
+                          pk->revoked.reason_comment_len,
+                          ":", NULL);
+      xfree (freeme);
+      es_putc (':', es_stdout);		/* End of field 21 (comment). */
+    }
   es_putc ('\n', es_stdout);
 
   print_revokers (es_stdout, 1, pk);
@@ -2042,6 +2235,8 @@ list_keyblock_colon (ctrl_t ctrl, kbnode_t keyblock,
                                 ":", NULL);
           es_putc (':', es_stdout);	/* End of field 20 (origin). */
 	  es_putc ('\n', es_stdout);
+          if ((opt.list_options & (LIST_SHOW_PREF|LIST_SHOW_PREF_VERBOSE)))
+            show_preferences (uid, 0, 2, 0);
 #ifdef USE_TOFU
 	  if (!uid->attrib_data && opt.with_tofu_info
               && (opt.trust_model == TM_TOFU || opt.trust_model == TM_TOFU_PGP))
@@ -2121,6 +2316,11 @@ list_keyblock_colon (ctrl_t ctrl, kbnode_t keyblock,
               if (!curvename)
                 curvename = curve;
               es_fputs (curvename, es_stdout);
+            }
+          else if (pk2->pubkey_algo == PUBKEY_ALGO_KYBER)
+            {
+              es_fputs (pubkey_string (pk2, pkstrbuf, sizeof pkstrbuf),
+                        es_stdout);
             }
           es_putc (':', es_stdout);	/* End of field 17. */
           print_compliance_flags (pk2, keylength, curvename);
@@ -2690,6 +2890,10 @@ print_key_line (ctrl_t ctrl, estream_t fp, PKT_public_key *pk, int secret)
   if (pk->flags.primary &&
       !opt.fingerprint && !opt.with_fingerprint)
     print_fingerprint (ctrl, fp, pk, 20);
+
+  /* Print the revocation reason.  */
+  if (pk->flags.revoked)
+    print_revocation_reason (pk);
 }
 
 

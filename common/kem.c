@@ -35,7 +35,7 @@
 #include <gpg-error.h>
 #include <gcrypt.h>
 #include "mischelp.h"
-
+#include "util.h"
 
 /* domSeperation as per *PGP specs. */
 #define KMAC_KEY "OpenPGPCompositeKeyDerivationFunction"
@@ -144,14 +144,51 @@ compute_kmac256 (void *digest, size_t digestlen,
 }
 
 
-/* Compute KEK (shared secret) for ECC with HASHALGO, ECDH result,
-   ciphertext in ECC_CT, public key in ECC_PK.  */
+/* Compute KEK for ECC with HASHALGO, ECDH result, and KDF_PARAMS.
+ *
+ * KDF_PARAMS is specified by upper layer.
+ */
 gpg_error_t
-gnupg_ecc_kem_kdf (void *kek, size_t kek_len,
+gnupg_ecc_kem_kdf (void *kek, size_t kek_len, int is_pgp,
                    int hashalgo, const void *ecdh, size_t ecdh_len,
-                   const void *ecc_ct, size_t ecc_ct_len,
-                   const void *ecc_pk, size_t ecc_pk_len)
+                   const unsigned char *kdf_params, size_t kdf_params_len)
 {
+  /* Traditional ECC */
+  gpg_error_t err;
+  gcry_kdf_hd_t hd;
+  unsigned long param[1];
+  int kdf_algo;
+
+  if (is_pgp)
+    kdf_algo = GCRY_KDF_ONESTEP_KDF;
+  else
+    kdf_algo = GCRY_KDF_X963_KDF;
+
+  param[0] = kek_len;
+  err = gcry_kdf_open (&hd, kdf_algo, hashalgo, param, 1,
+                       ecdh, ecdh_len, NULL, 0, NULL, 0,
+                       kdf_params, kdf_params_len);
+  if (!err)
+    {
+      gcry_kdf_compute (hd, NULL);
+      gcry_kdf_final (hd, kek_len, kek);
+      gcry_kdf_close (hd);
+    }
+
+  return err;
+}
+
+
+/* Compute KEK for ECC with HASHALGO, ECDH result, ciphertext in
+ * ECC_CT (which is an ephemeral key), and public key in ECC_PK.
+ */
+gpg_error_t
+gnupg_ecc_kem_simple_kdf (void *kek, size_t kek_len,
+                          int hashalgo, const void *ecdh, size_t ecdh_len,
+                          const void *ecc_ct, size_t ecc_ct_len,
+                          const void *ecc_pk, size_t ecc_pk_len)
+{
+  /* ECC part in composite KEM */
   gcry_buffer_t iov[3];
   unsigned int dlen;
 
@@ -217,4 +254,81 @@ gnupg_kem_combiner (void *kek, size_t kek_len,
                          KMAC_KEY, strlen (KMAC_KEY),
                          KMAC_CUSTOM, strlen (KMAC_CUSTOM), iov, 6);
   return err;
+}
+
+#define ECC_CURVE25519_INDEX 0
+static const struct gnupg_ecc_params ecc_table[] =
+  {
+    {
+      "Curve25519",
+      33, 32, 32,
+      GCRY_MD_SHA3_256, GCRY_KEM_RAW_X25519,
+      1, 1, 0
+    },
+    {
+      "X448",
+      56, 56, 56,
+      GCRY_MD_SHA3_512, GCRY_KEM_RAW_X448,
+      0, 0, 0
+    },
+    {
+      "NIST P-256",
+      65, 32, 65,
+      GCRY_MD_SHA3_256, GCRY_KEM_RAW_P256R1,
+      0, 0, 1
+    },
+    {
+      "NIST P-384",
+      97, 48, 97,
+      GCRY_MD_SHA3_512, GCRY_KEM_RAW_P384R1,
+      0, 0, 1
+    },
+    {
+      "NIST P-521",
+      133, 66, 133,
+      GCRY_MD_SHA3_512, GCRY_KEM_RAW_P521R1,
+      0, 0, 1
+    },
+    {
+      "brainpoolP256r1",
+      65, 32, 65,
+      GCRY_MD_SHA3_256, GCRY_KEM_RAW_BP256,
+      0, 0, 1
+    },
+    {
+      "brainpoolP384r1",
+      97, 48, 97,
+      GCRY_MD_SHA3_512, GCRY_KEM_RAW_BP384,
+      0, 0, 1
+    },
+    {
+      "brainpoolP512r1",
+      129, 64, 129,
+      GCRY_MD_SHA3_512, GCRY_KEM_RAW_BP512,
+      0, 0, 1
+    },
+#ifdef GCRY_KEM_RAW_P256K1
+    {
+      "secp256k1",
+      65, 32, 65,
+      GCRY_MD_SHA3_256, GCRY_KEM_RAW_P256K1,
+      0, 0, 1
+    },
+#endif
+    { NULL, 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+
+
+/* Return the ECC parameters for CURVE.  CURVE is expected to be the
+ * canonical name.  */
+const struct gnupg_ecc_params *
+gnupg_get_ecc_params (const char *curve)
+{
+  int i;
+
+  for (i = 0; ecc_table[i].curve; i++)
+    if (!strcmp (ecc_table[i].curve, curve))
+      return &ecc_table[i];
+
+  return NULL;
 }

@@ -292,7 +292,9 @@ create_common_conf (const char *dname)
                     gpg_strerror (gpg_error_from_syserror ()));
         }
     }
-#endif /* BUILD_WITH_KEYBOXD */
+#else /* BUILD_WITH_KEYBOXD */
+  (void)dname;
+#endif /* !BUILD_WITH_KEYBOXD */
 }
 
 
@@ -984,6 +986,30 @@ w32_commondir (void)
     }
 
   return dir;
+}
+
+
+/*
+ * On Windows, isatty returns TRUE when it's NUL device.
+ * We need additional check.
+ */
+int
+gnupg_isatty (int fd)
+{
+  HANDLE h;
+  DWORD mode;
+
+  if (!isatty (fd))
+    return 0;
+
+  h = (HANDLE)_get_osfhandle (fd);
+  if (h == INVALID_HANDLE_VALUE)
+    return 0;
+
+  if (!GetConsoleMode (h, &mode))
+    return 0;
+
+  return 1;
 }
 #endif /*HAVE_W32_SYSTEM*/
 

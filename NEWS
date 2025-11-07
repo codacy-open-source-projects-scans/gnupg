@@ -1,10 +1,421 @@
-Noteworthy changes in version 2.5.2 (unreleased)
+Noteworthy changes in version 2.5.14 (unreleased)
+-------------------------------------------------
+
+
+  Release-info: https://dev.gnupg.org/T7869
+
+
+Noteworthy changes in version 2.5.13 (2025-10-22)
+-------------------------------------------------
+
+  * gpg: Fix de-vs compliance with OCB and additional password.
+    [T7804]
+
+  * gpg: Detect duplicate keys with --add-recipients.  [T1825]
+
+  * gpg: Take care about the prefix for cv25519 encryption.  [T7649]
+
+  * gpg: Avoid potential downgrade to SHA1 in 3rd party key
+    signatures.  [rGdb9705ef59]
+
+  * gpg: Error out on unverified output for non-detached signatures.
+    [rG8abc320f2a]
+
+  * gpgsm: Use KEM interface for en- and decryption.  [T7811,T7845]
+
+  * gpgsm: Fix delete and store certificate locking glitches.  [T7855]
+
+  * gpg,gpgsm: Run keybox compression only when there are no other
+    users.  [T7855]
+
+  * gpg,gpgsm: Improve keybox closing and locking order on read and
+    write.  [T7855]
+
+  * gpg,gpgsm: Always use share mode read-write for the keybox file
+    access.  [T7829]
+
+  * scd:openpgp: Fix an oddity in changing the PIN.  [T7840]
+
+  * dirmngr: New LDAP keyserver flag "upload".  [T7866]
+
+  * agent: Retry private key deletion in case of sharing violations
+    for up to 400ms.  [T7863]
+
+  * Take care of a possible race on daemon startup under Windows.
+    [T7829]
+
+  * Improve file renaming on Windows in case of a sharing violation
+    error.  [T7829]
+
+  Release-info: https://dev.gnupg.org/T7801
+
+
+Noteworthy changes in version 2.5.12 (2025-09-02)
+-------------------------------------------------
+
+  * gpg: New options --[no-]auto-key-upload.  [T7333]
+
+  * gpg: Keys send to an LDAP server are now first updated from that
+    server.  New keyserver option "no-update-before-send" to disable
+    this feature.  [T7730]
+
+  * gpg: Disable default compression for 7z compressed input.
+    [rG53252628de]
+
+  * gpg: Fix a regression with composite PQC and ECC algos.  [T7649]
+
+  * gpg: Fix the list of possible algos for --edit-key:addkey.
+    [T7788]
+
+  * gpg: Allow to select the Kyber variants with --edit-key:addkey.
+    [T7792]
+
+  * gpg: Avoid a second Pinentry pop-up for a configured ADSK during
+    key generation.  [T7491]
+
+  * gpg: Change the ADSK key binding time to use the current time.
+    [T6882]
+
+  * gpgsm: Add option --no-qes-note and new trustlist flag
+    "noconsent".  [T7713]
+
+  * agent: Enable "relax" in the trustlist by default and add flag
+    "norelax".  [rG7b133027ae]
+
+  * agent: Fix a crash on Windows in the Putty support.  [T7799]
+
+  * dirmgr: Support LDAP servers using a schema like the Windows LDS
+    servers.  [T7742]
+
+  * scd:openpgp: Support Yubikey attestation generation.
+    [rG5ddfedf24a]
+
+  * gpgtar: Fix regression in end-of-archive detection.  [T7757]
+
+  Release-info: https://dev.gnupg.org/T7756
+
+
+Noteworthy changes in version 2.5.11 (2025-07-30)
+-------------------------------------------------
+
+  * gpg: Fix a segv in key signing with notations introduced in
+    2.5.10.  [T7754]
+
+  * agent: Fix for smartcard decryption with Brainpool keys.  [T7709]
+
+  Release-info: https://dev.gnupg.org/T7743
+
+
+Noteworthy changes in version 2.5.10 (2025-07-25)
+-------------------------------------------------
+
+  * gpg: Add a notation with version information to signatures.  See
+    doc/DETAILS for, well, details.  [rG11d3a83b04]
+
+  * gpgv: New option --print-notation.  [rGe3cc410003]
+
+  * gpgsm: Fix caching of the trustlist's flags.  [T7738]
+
+  * agent: Fix for smartcard decryption returning x-coordinate only.
+    [T7709]
+
+  * agent: Another fix for a regression with unknown curves and ssh.
+    See also 2.5.4.  [rG55db12472f]
+
+  * dirmngr: Implement command KS_DEL for ldap servers.  [T5447]
+
+  Release-info: https://dev.gnupg.org/T7719
+
+
+Noteworthy changes in version 2.5.9 (2025-07-10)
 ------------------------------------------------
+
+  * gpg: Add the revocation reason to the sigclass of a "rev" line.
+    Regression in 2.5.7.  [T7073]
+
+  * gpg: Do not show the non-standard secp256k1 curve in the menu to
+    select the curve.  It can however be specified using its name.
+    [rG49a9171f63]
+
+  * gpg: Fix regression in using the secp256k1 curve.  [T7698]
+
+  * dirmngr: New option --user-agent and send a default User-Agent of
+    "GnuPG/2.6" for all HTTP requests.  [T7715]
+
+
+  Release-info: https://dev.gnupg.org/T7695
+
+
+Noteworthy changes in version 2.5.8 (2025-06-20)
+------------------------------------------------
+
+  * gpg: Show revocation reason with a standard -k listing.  [T7083]
+
+  * gpg: Emit a revocation reason as comment in a "pub" record.
+    [T7083]
+
+  * agent: Fix regression in 2.5.7 decrypting with a card based
+    cv25519 key.  [T7676]
+
+  * scd:openpgp: Fix a regression in exporting card based ed25519 ssh
+    keys.  [T7589]
+
+  * dirmngr: Do not require a keyserver for "gpg --fetch-key".
+    [T7693]
+
+
+  See-also: gnupg-announce/2025q2/000494.html
+  Release-info: https://dev.gnupg.org/T7672
+
+
+Noteworthy changes in version 2.5.7 (2025-06-02)
+------------------------------------------------
+
+  * gpg: Allow updating a SHA-1 key certification w/o using
+    the --force-sign-key option.  [T7663]
+
+  * gpg: The group key flag has now been fully implemented.
+    [rG8833a34bf0]
+
+  * gpg: Make combination of show-only-fpr-mbox and show-unusable-uid
+    work.  [rGd5a4a2dc89]
+
+  * gpg: Do not allow compressed key packets on import.  [T7014]
+
+  * gpgsm: Allow an empty subject DN also during import.  [T7171]
+
+  * agent: Recover the old behavior with max-cache-ttl=0.  [T6681]
+
+  * agent: Fix ECC key on smartcard for composite KEM with PQC.
+    [T7648]
+
+  * scd: Fix a harmless read buffer over-read in a function used by
+    PKCS#15 cards.  [T7662]
+
+  * gpg-mail-tube,wks: Support templates for mail content.  [T7381]
+
+  * Use the KEM interface of Libgcrypt for encryption/decryption.
+    [T7649]
+
+  * Fix a glitch in socket handling in Windows in case of a nonce
+    mismatch.  [rG645cf7d8fc]
+
+
+  See-also: gnupg-announce/2025q2/000493.html
+  Release-info: https://dev.gnupg.org/T7671
+
+
+Noteworthy changes in version 2.5.6 (2025-05-08)
+------------------------------------------------
+
+  * gpg: Add a flag to the filter expressions for left anchored
+    substring match.  [rGc12b7d047e]
+
+  * gpg: New list option "show-trustsig" to avoid resorting to colon
+    mode for this info.  [rG41d6ae8f41]
+
+  * gpg: New command --quick-tsign-key to create a trust signature.
+    [rGd90b290f97]
+
+  * gpg: New keygen parameter "User-Id".  [rGcfd597c603]
+
+  * gpg: New list options "show-trustsig".  [rGrG41d6ae8f41]
+
+  * gpg: Fix double free of internal data in no-sig-cache mode [T7547]
+
+  * gpg: Signatures from revoked or expired keys do not anymore show
+    up as missing keys.  Fixes regression in 2.5.5.  [T7583]
+
+  * gpgsm: Extend --learn-card by an optional s/n argument.  [T7379]
+
+  * gpgsm: Skip expired certificates when selection a certificate by
+    subject.  [rG4cf83273e8]
+
+  * card: New command "ll" as alias for "list --cards".  [rGd6ee7adebe]
+
+  * scd: Fix posssible lockup on Windows due to a lost select
+    result.  [rGa7ec3792c5]
+
+  * scd:p15: Accept P15 cards with a zero-length label.  [rGdb25aa9887]
+
+  * keyboxd: Use case-insensitive search for mail addresses.  [T7576]
+
+  * dirmngr: Fix a problem in libdns related to an address change from
+    127.0.0.1.  [T4021]
+
+  * gpgconf: Fix reload and kill of keyboxd.  [T7569]
+
+  * Fix logic for certain recsel conditions.  [rG8968e84903]
+
+  * Add Solaris support to get_signal_name.  [T7638]
+
+  * Fix build error of the test shell on AIX.  [T7632]
+
+  See-also: gnupg-announce/2025q2/000492.html
+  Release-info: https://dev.gnupg.org/T7586
+
+
+Noteworthy changes in version 2.5.5 (2025-03-07)
+------------------------------------------------
+
+  * gpg: Fix a verification DoS due to a malicious subkey in the
+    keyring.  [T7527]
+
+  * dirmngr: Fix possible hangs due to blocking connection requests.
+    [T6606, T7434]
+
+  * w32: On socket nonce mismatch close the socket.  [T7434]
+
+  * w32: Print more detailed diagnostics for IPC errors.
+
+  * GPGME is not any more distributed with the Windows installer.
+    Please install gpg4win to get gpgme version.
+
+  See-also: gnupg-announce/2025q1/000491.html
+  Release-info: https://dev.gnupg.org/T7530
+
+
+Noteworthy changes in version 2.5.4 (2025-02-12)
+------------------------------------------------
+
+  * gpg: New option --disable-pqc-encryption.  [rG00c31f8b04]
+
+  * gpg: Fix --quick-add-key for Weierstrass ECC with usage given.
+    [T7506]
+
+  * gpg: Fix handling with no CRC armor.  [T7071]
+
+  * gpg: New private Kyber keys are now cross-referenced using a new
+    Link attribute.  [T6638]
+
+  * gpg: Fix an import problem with keys having another primary key as
+    a subkey.  [T7527]
+
+  * gpgsm: Allow unattended PKCS#12 export without passphrase.
+    [rG159e801043]
+
+  * gpgsm: Allow CSR generation with an unprotected key.
+    [rG89055f24f4]
+
+  * agent: New option --change-std-env-name.  [T7522]
+
+  * agent: Fix ssh-agent's request_identities for skipped Brainpool
+    keys.  [rG2469dc5aae]
+
+  * Do not package zlib and bzip2 object files in a speedo release
+    build.  [T7442]
+
+  See-also: gnupg-announce/2025q1/000490.html
+  Release-info: https://dev.gnupg.org/T7480
+
+
+Noteworthy changes in version 2.5.3 (2025-01-09)
+------------------------------------------------
+
+  * gpg: Allow for signature subpackets of up to 30000 octets.
+    [rG36dbca3e69]
+
+  * gpg: Silence expired trusted-key diagnostics in quiet mode.  [T7351]
+
+  * gpg: Allow smaller session keys with Kyber and enforce the use of
+    AES-256 if useful.  [T7472]
+
+  * gpg: Fix regression in key generation from existing card key.
+    [T7309,T7457]
+
+  * gpg: Print a warning if the card backup key could not be written.
+    [T2169]
+
+  * The --supervised options of gpg-agent and dirmngr have been
+    renamed to --deprecated-supervised as preparation for their
+    removal.  [rGa019a0fcd8]
+
+  * There is no more default for a keyserver.
+
+  See-also: gnupg-announce/2025q1/000489.html
+  Release-info: https://dev.gnupg.org/T7442
+
+
+Noteworthy changes in version 2.5.2 (2024-12-05)
+------------------------------------------------
+
+  * gpg: Add option 16 to --full-gen-key to create ECC+Kyber.  [T6638]
+
+  * gpg: For composite algos add the algo string to the colons
+    listings.  [T6638]
+
+  * gpg: Validate the trustdb after the import of a trusted key.
+    [T7200]
+
+  * gpg: Exclude expired trusted keys from the key validation process.
+    [T7200]
+
+  * gpg: Fix a wrong decryption failed status for signed and OCB
+    encrypted messages without a signature verification key.  [T7042]
+
+  * gpg: Retain binary representation for import->export with Ed25519
+    key signatures.  [T7426]
+
+  * gpg: Fix comparing ed448 to ed25519 with --assert-pubkey-algo.
+    [T7425]
+
+  * gpg: Avoid a failure exit code for expired ultimately trusted
+    keys.  [T7351]
+
+  * gpg: Emit status error for an invalid ADSK.  [T7322]
+
+  * gpg: Allow the use of an ADSK subkey as ADSK subkey.  [T6882]
+
+  * gpg: Fix --quick-set-expire for V5 subkey fingerprints.  [T7298]
+
+  * gpg: Robust error handling for SCD READKEY.  [T7309]
+
+  * gpg: Fix cv25519 v5 export regression.  [T7316]
+
+  * gpgsm: Nearly fourfold speedup of validated certificate listings.
+    [T7308]
+
+  * gpgsm: Improvement for some rare P12 files.  [rGf50dde6269]
+
+  * gpgsm: Terminate key listing on output write error.  [T6185]
+
+  * agent: Add option --status to the LISTRUSTED command.
+    [rG4275d5fa7a]
+
+  * agent: Fix detection of the yet unused trustflag de-vs.  [T5079]
+
+  * agent: Allow ssh to sign data larger than the Assuan line length.
+    [T7436]
+
+  * keyboxd: Fix a race condition on the database handle.  [T7294]
 
   * dirmngr: A list of used URLs for loaded CRLs is printed first in
     the output of the LISTCRL command.  [T7337]
 
-  See-also: gnupg-announce/2024q4/000xxx.html
+  * scd: More mitigations against lock ups with multiple cards or
+    apps.  [T7323, T7402]
+
+  * gpgtar: Use log-file from common.conf only in --batch mode.
+    [rGb389e04ef5]
+
+  * gpgtar: Fix directory creation during extraction.  [T7380]
+
+  * gpg-mail-tube: Minor fixes.
+
+  * gpgconf: Add list flag to trusted-key et al.  [T7313]
+
+  * Implement GNUPG_ASSUME_COMPLIANCE envvar and registry key for
+    testing de-vs compliance mode.  [rGb287fb5775,rG7b0be541a9]
+
+  * Enable additional runtime protections in speedo builds for
+    Windows.  [rG39aa206dc5]
+
+  * Fix a race condition in creating the socket directory.  [T7332]
+
+  * Fix a build problem on macOS (missing unistd.h).  [T7193]
+
+
+  See-also: gnupg-announce/2024q4/000488.html
   Release-info: https://dev.gnupg.org/T7289
 
 

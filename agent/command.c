@@ -541,14 +541,26 @@ cmd_istrusted (assuan_context_t ctx, char *line)
 {
   ctrl_t ctrl = assuan_get_pointer (ctx);
   int rc, n, i;
-  char *p;
+  char *p, *pn;
   char fpr[41];
 
   /* Parse the fingerprint value. */
+  pn = NULL;  /* Indicates that we have not reparsed.  */
+ parseagain:
   for (p=line,n=0; hexdigitp (p); p++, n++)
     ;
   if (*p || !(n == 40 || n == 32))
-    return set_error (GPG_ERR_ASS_PARAMETER, "invalid fingerprint");
+    {
+      if (!pn && *p && strchr (p, ':'))
+        {
+          for (pn=p=line; *p ; p++)
+            if (*p != ':')
+              *pn++ = *p;
+          *pn = 0;
+          goto parseagain;
+        }
+      return set_error (GPG_ERR_ASS_PARAMETER, "invalid fingerprint");
+    }
   i = 0;
   if (n==32)
     {
@@ -1068,8 +1080,6 @@ cmd_pkdecrypt (assuan_context_t ctx, char *line)
   size_t valuelen;
   membuf_t outbuf;
   int padding = -1;
-  unsigned char *option = NULL;
-  size_t optionlen = 0;
   const char *p;
   int kemid = -1;
 
@@ -1095,10 +1105,7 @@ cmd_pkdecrypt (assuan_context_t ctx, char *line)
   rc = print_assuan_status (ctx, "INQUIRE_MAXLEN", "%u", MAXLEN_CIPHERTEXT);
   if (!rc)
     rc = assuan_inquire (ctx, "CIPHERTEXT",
-			&value, &valuelen, MAXLEN_CIPHERTEXT);
-  if (!rc && kemid > KEM_PQC_PGP)
-    rc = assuan_inquire (ctx, "OPTION",
-                         &option, &optionlen, MAXLEN_CIPHERTEXT);
+                        &value, &valuelen, MAXLEN_CIPHERTEXT);
   if (rc)
     return rc;
 
@@ -1108,11 +1115,8 @@ cmd_pkdecrypt (assuan_context_t ctx, char *line)
     rc = agent_pkdecrypt (ctrl, ctrl->server_local->keydesc,
                           value, valuelen, &outbuf, &padding);
   else
-    {
-      rc = agent_kem_decrypt (ctrl, ctrl->server_local->keydesc, kemid,
-                              value, valuelen, option, optionlen, &outbuf);
-      xfree (option);
-    }
+    rc = agent_kem_decrypt (ctrl, ctrl->server_local->keydesc, kemid,
+                            value, valuelen, &outbuf);
   xfree (value);
   if (rc)
     clear_outbuf (&outbuf);
@@ -2376,27 +2380,31 @@ cmd_get_confirmation (assuan_context_t ctx, char *line)
 
 
 static const char hlp_learn[] =
-  "LEARN [--send] [--sendinfo] [--force]\n"
+  "LEARN [--send] [--sendinfo] [--force] [SERIALNO]\n"
   "\n"
   "Learn something about the currently inserted smartcard.  With\n"
   "--sendinfo information about the card is returned; with --send\n"
   "the available certificates are returned as D lines; with --force\n"
-  "private key storage will be updated by the result.";
+  "private key storage will be updated by the result. With SERIALNO\n"
+  "given the current card is first switched to the specified one.";
 static gpg_error_t
 cmd_learn (assuan_context_t ctx, char *line)
 {
   ctrl_t ctrl = assuan_get_pointer (ctx);
   gpg_error_t err;
   int send, sendinfo, force;
+  const char *demand_sn;
 
   send = has_option (line, "--send");
   sendinfo = send? 1 : has_option (line, "--sendinfo");
   force = has_option (line, "--force");
+  line = skip_options (line);
+  demand_sn = *line? line : NULL;
 
   if (ctrl->restricted)
     return leave_cmd (ctx, gpg_error (GPG_ERR_FORBIDDEN));
 
-  err = agent_handle_learn (ctrl, send, sendinfo? ctx : NULL, force);
+  err = agent_handle_learn (ctrl, send, sendinfo? ctx : NULL, force, demand_sn);
   return leave_cmd (ctx, err);
 }
 

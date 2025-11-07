@@ -513,6 +513,11 @@ msgstr "próba kradzieży gniazda od działającego %s\n"
 msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "gpg-agent już działa - nieuruchamianie nowego\n"
 
+#, fuzzy, c-format
+#| msgid "key %s: removed multiple subkey binding\n"
+msgid "socket file removed - retrying binding\n"
+msgstr "klucz %s: usunięto wielokrotne dowiązanie podklucza\n"
+
 #, c-format
 msgid "error getting nonce for the socket\n"
 msgstr "błąd podczas pobierania nonce z gniazda\n"
@@ -743,6 +748,11 @@ msgstr "Zmiana hasła"
 
 msgid "I'll change it later"
 msgstr "Zmienię je później"
+
+#, fuzzy, c-format
+#| msgid "receiving line failed: %s\n"
+msgid "Unprotecting key failed: %s\n"
+msgstr "odbieranie linii nie powiodło się: %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr "Proszę włożyć kartę z numerem seryjnym"
@@ -1369,6 +1379,16 @@ msgstr "wymuszono"
 msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr "Proszę spróbować polecenia „%s”, jeśli lista nie wygląda poprawnie\n"
 
+#, c-format
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+"Fabryczne ustawienia PIN-ów to\n"
+"   PIN = „%s”   PIN administracyjny = „%s”\n"
+"Należy je zmienić przy użyciu polecenia --change-pin\n"
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr "Błąd: aktualnie dopuszczalne jest tylko czyste ASCII.\n"
 
@@ -1522,16 +1542,6 @@ msgstr "Uwaga: klucze są już zapisane na karcie!\n"
 msgid "Replace existing keys? (y/N) "
 msgstr "Zastąpić istniejące klucze? (t/N) "
 
-#, c-format
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-"Fabryczne ustawienia PIN-ów to\n"
-"   PIN = „%s”   PIN administracyjny = „%s”\n"
-"Należy je zmienić przy użyciu polecenia --change-pin\n"
-
 msgid "Please select the type of key to generate:\n"
 msgstr "Proszę wybrać rodzaj klucza do wygenerowania:\n"
 
@@ -1650,7 +1660,7 @@ msgstr "Niepoprawne polecenie  (spróbuj „help”)\n"
 
 #, fuzzy, c-format
 #| msgid "key operation not possible: %s\n"
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "operacja na kluczu niewykonalna: %s\n"
 
 #, fuzzy
@@ -1807,6 +1817,11 @@ msgstr "Liczba odbiorców"
 #, c-format
 msgid "option '%s' may not be used in %s mode\n"
 msgstr "opcja „%s” nie może być używana w trybie %s\n"
+
+#, fuzzy, c-format
+#| msgid "can't encrypt to '%s'\n"
+msgid "already encrypted to %08lX\n"
+msgstr "nie można zaszyfrować do „%s”\n"
 
 #, c-format
 msgid "%s encrypted data\n"
@@ -1993,6 +2008,11 @@ msgstr "szybkie złożenie podpisu na kluczu"
 
 msgid "quickly sign a key locally"
 msgstr "szybkie złożenie prywatnego podpisu na kluczu"
+
+#, fuzzy
+#| msgid "sign selected user IDs with a trust signature"
+msgid "quickly sign a key with a trust signature"
+msgstr "podpisanie wybranych identyfikatorów użytkownika sygnaturą zaufania"
 
 msgid "quickly revoke a key signature"
 msgstr "szybkie unieważnienie podpisu klucza"
@@ -2306,6 +2326,11 @@ msgstr "pokazanie ustawień"
 #| msgid "change the ownertrust"
 msgid "show ownertrust"
 msgstr "zmiana zaufania właściciela"
+
+#, fuzzy
+#| msgid "Unknown critical signature notation: "
+msgid "show trust signature information"
+msgstr "Nieznane krytyczne adnotacje podpisu: "
 
 #, c-format
 msgid "unknown TOFU policy '%s'\n"
@@ -2641,6 +2666,9 @@ msgstr "|FD|pisanie opisu stanu do deskryptora FD"
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr "|ALGO|odrzucanie podpisów wykonanych podanym ALGOrytmem"
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr ""
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "Składnia: gpgv [opcje] [pliki] (-h wyświetla pomoc)"
 
@@ -2699,6 +2727,11 @@ msgstr "przyjęcie wejścia w formacie kopii zapasowej klucza GnuPG"
 
 msgid "repair keys on import"
 msgstr "naprawienie kluczy przy imporcie"
+
+#, fuzzy
+#| msgid "list secret keys"
+msgid "do not import secret keys"
+msgstr "lista kluczy prywatnych"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -2963,10 +2996,6 @@ msgstr "identyfikator użytkownika przestał być poprawny"
 #, c-format
 msgid "reason for revocation: "
 msgstr "powód unieważnienia: "
-
-#, c-format
-msgid "revocation comment: "
-msgstr "komentarz do unieważnienia: "
 
 #, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -3680,6 +3709,11 @@ msgstr "Brak pasującego identyfikatora użytkownika."
 msgid "Nothing to sign.\n"
 msgstr "Nie ma nic do podpisania.\n"
 
+#, fuzzy, c-format
+#| msgid "revoking the key signature failed: %s\n"
+msgid "creating key signature failed: %s\n"
+msgstr "unieważnienie podpisu klucza nie powiodło się: %s\n"
+
 #, c-format
 msgid "Not signed by you.\n"
 msgstr "Nie podpisane przez ciebie.\n"
@@ -4202,6 +4236,11 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) Istniejący klucz z karty%s\n"
 
 #, fuzzy, c-format
+#| msgid "   (%d) ECC (sign and encrypt)%s\n"
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "   (%d) ECC (podpisywanie i szyfrowanie)%s\n"
+
+#, fuzzy, c-format
 #| msgid "  (%d) ECC (encrypt only)%s\n"
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) ECC (tylko do szyfrowania)%s\n"
@@ -4245,6 +4284,11 @@ msgstr "Żądana długość klucza to %u bitów.\n"
 
 msgid "Please select which elliptic curve you want:\n"
 msgstr "Proszę wybrać rodzaj krzywej eliptycznej:\n"
+
+#, fuzzy, c-format
+#| msgid "Please select what kind of key you want:\n"
+msgid "Please select the %s variant you want:\n"
+msgstr "Proszę wybrać rodzaj klucza:\n"
 
 msgid ""
 "Please specify how long the key should be valid.\n"
@@ -4479,6 +4523,12 @@ msgstr "nie można utworzyć pliku kopii zapasowej „%s”: %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "Uwaga: kopia zapasowa klucza karty zapisana do „%s”\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+
 #, c-format
 msgid "writing public key to '%s'\n"
 msgstr "zapis klucza publicznego w „%s”\n"
@@ -4590,6 +4640,10 @@ msgstr[2] "Ostrzeżenie: %lu kluczy pominięto z powodu dużego rozmiaru\n"
 msgid "Keyring"
 msgstr "Zbiór kluczy"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "komentarz do unieważnienia: "
+
 msgid "Revocable by: "
 msgstr ""
 
@@ -4665,6 +4719,9 @@ msgstr "automatyczne pobieranie kluczy przy sprawdzaniu podpisów"
 msgid "honor the preferred keyserver URL set on the key"
 msgstr "honorowanie URL-a preferowanego serwera kluczy ustawionego w kluczu"
 
+msgid "update a key before sending it"
+msgstr ""
+
 msgid "disabled"
 msgstr "wyłączony"
 
@@ -4678,6 +4735,11 @@ msgstr "niepoprawny protokół serwera kluczy (nasz %d != moduł obsługi %d)\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr "„%s” nie jest identyfikatorem klucza - pominięto\n"
+
+#, fuzzy, c-format
+#| msgid "\"%s\" is not a fingerprint\n"
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "„%s” nie jest odciskiem\n"
 
 #, c-format
 msgid "refreshing %d key from %s\n"
@@ -4705,6 +4767,10 @@ msgstr "zapytanie o klucz %s z %s\n"
 #, c-format
 msgid "no keyserver known\n"
 msgstr "brak znanego serwera kluczy\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr ""
 
 #, c-format
 msgid "skipped \"%s\": %s\n"
@@ -5037,6 +5103,11 @@ msgstr "nieskompresowany|brak"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "ta wiadomość może nie dać się odczytać za pomocą %s\n"
+
+#, fuzzy
+#| msgid "enable key"
+msgid "enabled"
+msgstr "włączenie klucza do użycia"
 
 #, c-format
 msgid "ambiguous option '%s'\n"
@@ -5527,6 +5598,11 @@ msgstr "używany klucz nie jest oznaczony jako przeznaczony do szyfrowania.\n"
 #, c-format
 msgid "okay, we are the anonymous recipient.\n"
 msgstr "OK, to my jesteśmy adresatem anonimowym.\n"
+
+#, fuzzy, c-format
+#| msgid "WARNING: signing subkey %s is not cross-certified\n"
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr "OSTRZEŻENIE: podklucz podpisujący %s nie jest skrośnie podpisany\n"
 
 #, c-format
 msgid "old encoding of the DEK is not supported\n"
@@ -6434,13 +6510,19 @@ msgstr[0] " (skasowano %d licznik zaufania)\n"
 msgstr[1] " (skasowano %d liczniki zaufania)\n"
 msgstr[2] " (skasowano %d liczników zaufania)\n"
 
-#, c-format
-msgid "no ultimately trusted keys found\n"
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s not found\n"
+msgstr "brak absolutnie zaufanych kluczy\n"
+
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s expired\n"
 msgstr "brak absolutnie zaufanych kluczy\n"
 
 #, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr "klucz publiczny absolutnie zaufanego klucza %s nie odnaleziony\n"
+msgid "no ultimately trusted keys found\n"
+msgstr "brak absolutnie zaufanych kluczy\n"
 
 #, c-format
 msgid ""
@@ -7582,10 +7664,10 @@ msgstr "błąd zapisywania flag: %s\n"
 msgid "Error - "
 msgstr "Błąd - "
 
-#, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr ""
-"GPG_TTY nie zostało ustawione - użycie być może nieprawidłowego domyślnego\n"
+#, fuzzy, c-format
+#| msgid "error writing to '%s': %s\n"
+msgid "error writing to output: %s\n"
+msgstr "błąd zapisu do „%s”: %s\n"
 
 #, c-format
 msgid "invalid formatted fingerprint in '%s', line %d\n"
@@ -9056,6 +9138,16 @@ msgstr "polecenia zarządzające kluczami Yubikey"
 
 msgid "manage the command history"
 msgstr "zarządzanie historią poleceń"
+
+#, c-format
+#~ msgid "GPG_TTY has not been set - using maybe bogus default\n"
+#~ msgstr ""
+#~ "GPG_TTY nie zostało ustawione - użycie być może nieprawidłowego "
+#~ "domyślnego\n"
+
+#, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr "klucz publiczny absolutnie zaufanego klucza %s nie odnaleziony\n"
 
 #, c-format
 #~ msgid "waiting for process %d to terminate failed: %s\n"

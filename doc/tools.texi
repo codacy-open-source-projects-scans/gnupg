@@ -2060,7 +2060,8 @@ implemented.
 @item --batch
 @opindex batch
 Use batch mode.  Never ask but use the default action.  This option is
-passed directly to @command{gpg}.
+passed directly to @command{gpg}.  This option is also required to
+activate the @option{log-file} in @file{common.conf} for this program.
 
 @item --yes
 @opindex yes
@@ -2192,6 +2193,12 @@ stdout.
 The recipients must be plain mail addresses
 (e.g. @code{foo@@example.org}) and should in general list the To and
 Cc addresses contained in the mail.
+
+The tool needs to insert strings into the mails which can be
+configured using a plain text file.  The installed default files for
+English (@file{mail-tube.txt}) and German (@file{mail-tube.de.txt})
+can be copied to the system configuration directory and changed to
+local needs.  Environment variables in these texts are expanded.
 
 @mansect options
 @noindent

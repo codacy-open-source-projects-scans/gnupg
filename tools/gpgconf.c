@@ -433,7 +433,7 @@ valid_swdb_name_p (const char *name)
  *           'c' :: The version is Current
  *           'n' :: The current version is already Newer than the
  *                  available one.
- * urgency :: If the value is greater than zero an urgent update is required.
+ * minvers :: The minimal secure version.
  * error   :: 0 on success or an gpg_err_code_t
  *            Common codes seen:
  *            GPG_ERR_TOO_OLD :: The SWDB file is to old to be used.
@@ -464,6 +464,7 @@ query_swdb (estream_t out, const char *name, const char *current_version)
   gnupg_isotime_t filedate = {0};
   gnupg_isotime_t verified = {0};
   char *value_ver = NULL;
+  char *value_minver = NULL;
   gnupg_isotime_t value_date = {0};
   char *value_size = NULL;
   char *value_sha2 = NULL;
@@ -566,6 +567,8 @@ query_swdb (estream_t out, const char *name, const char *current_version)
             value_size = xstrdup (fields[1]);
           else if (!strcmp (p, "sha2") && !value_sha2)
             value_sha2 = xstrdup (fields[1]);
+          else if (!strcmp (p, "minver") && !value_minver)
+            value_minver = xstrdup (fields[1]);
         }
     }
   if (len < 0 || es_ferror (fp))
@@ -616,10 +619,11 @@ query_swdb (estream_t out, const char *name, const char *current_version)
   else
     status = 'n';
 
-  es_fprintf (out, "%s:%s:%c::%d:%s:%s:%s:%s:%lu:%s:\n",
+  es_fprintf (out, "%s:%s:%c:%s:%d:%s:%s:%s:%s:%lu:%s:\n",
               name,
               current_version? current_version : "",
               status,
+              value_minver? value_minver : value_ver,
               err,
               filedate,
               verified,
@@ -629,6 +633,7 @@ query_swdb (estream_t out, const char *name, const char *current_version)
               value_sha2? value_sha2 : "");
 
  leave:
+  xfree (value_minver);
   xfree (value_ver);
   xfree (value_size);
   xfree (value_sha2);
@@ -1481,6 +1486,82 @@ show_configs_one_file (const char *fname, int global, estream_t outfp,
 }
 
 
+/* Read registry string wrapper which also support the GnuPG Registry
+ * emulation.  */
+static char *
+my_read_reg_string (const char *name, int *r_hklm_fallback)
+{
+#ifdef HAVE_W32_SYSTEM
+  return read_w32_reg_string (name, r_hklm_fallback);
+#else
+  static gpgrt_nvc_t registry;
+  static int no_registry;
+  const char *s;
+  gpgrt_nve_t e;
+  char *namebuffer = NULL;
+  char *p;
+
+  if (r_hklm_fallback)
+    *r_hklm_fallback = 0; /* We only support HKLM */
+
+  if (no_registry)
+    return NULL;
+
+  /* Read and parse the registry if not yet done.  */
+  if (!registry)
+    {
+      gpg_error_t err;
+      int lnr;
+      char *fname;
+      estream_t fp;
+
+      fname = make_filename (gnupg_sysconfdir (), "Registry", NULL);
+      fp = es_fopen (fname, "r");
+      if (!fp)
+        {
+          no_registry = 1;
+          return NULL;
+        }
+      if (opt.verbose)
+        log_info ("Note: Using Registry emulation file '%s'\n", fname);
+
+      err = gpgrt_nvc_parse (&registry, &lnr, fp, GPGRT_NVC_SECTION);
+      es_fclose (fp);
+      if (err)
+        {
+          log_info ("%s:%d: error parsing Registry emulation file: %s\n",
+                    fname, lnr, gpg_strerror (err));
+          no_registry = 1;
+          xfree (fname);
+          return NULL;
+        }
+      xfree (fname);
+    }
+
+  if (name)
+    {
+      namebuffer = xstrdup (name);
+      for (p=namebuffer; *p; p++)
+        if (*p == '\\')
+          *p = '/';
+      name = namebuffer;
+    }
+
+  e = gpgrt_nvc_lookup (registry, name);
+  if (!e && *name != '/')
+    {
+      /* Strip any HKLM or HKCU prefix and try again.  */
+      name = strchr (name, '/');
+      if (name)
+        e = gpgrt_nvc_lookup (registry, name);
+    }
+  xfree (namebuffer);
+  s = e? gpgrt_nve_value (e) : NULL;
+  return s? xtrystrdup (s) : NULL;
+#endif
+}
+
+
 #ifdef HAVE_W32_SYSTEM
 /* Print registry entries relevant to the GnuPG system and related
  * software.  */
@@ -1561,7 +1642,7 @@ show_other_registry_entries (estream_t outfp)
           name = namebuf;
         }
 
-      value = read_w32_reg_string (name, &from_hklm);
+      value = my_read_reg_string (name, &from_hklm);
       if (!value)
         continue;
 
@@ -1587,6 +1668,7 @@ show_other_registry_entries (estream_t outfp)
 
   xfree (namebuf);
 }
+#endif /*HAVE_W32_SYSTEM*/
 
 
 /* Print registry entries take from a configuration file.  */
@@ -1628,7 +1710,7 @@ show_registry_entries_from_file (estream_t outfp)
         continue;
 
       xfree (value);
-      value = read_w32_reg_string (line, &from_hklm);
+      value = my_read_reg_string (line, &from_hklm);
       if (!value)
         continue;
 
@@ -1654,7 +1736,6 @@ show_registry_entries_from_file (estream_t outfp)
   es_fclose (fp);
   xfree (fname);
 }
-#endif /*HAVE_W32_SYSTEM*/
 
 
 /* Show all config files.  */
@@ -1754,7 +1835,6 @@ show_configs (estream_t outfp)
         es_fprintf (outfp, "#+end_example\n");
     }
 
-#ifdef HAVE_W32_SYSTEM
   es_fprintf (outfp, "** Registry entries\n");
   es_fprintf (outfp, "#+begin_example\n");
   any = 0;
@@ -1771,7 +1851,7 @@ show_configs (estream_t outfp)
                 any = 1;
                 es_fprintf (outfp, "Encountered in config files:\n");
               }
-            if ((p = read_w32_reg_string (sl->d, &from_hklm)))
+            if ((p = my_read_reg_string (sl->d, &from_hklm)))
               es_fprintf (outfp, "  %s ->%s<-%s\n", sl->d, p,
                           from_hklm? " [hklm]":"");
             else
@@ -1779,10 +1859,11 @@ show_configs (estream_t outfp)
             xfree (p);
           }
     }
+#ifdef HAVE_W32_SYSTEM
   show_other_registry_entries (outfp);
+#endif /*HAVE_W32_SYSTEM*/
   show_registry_entries_from_file (outfp);
   es_fprintf (outfp, "#+end_example\n");
-#endif /*HAVE_W32_SYSTEM*/
 
   free_strlist (list);
 

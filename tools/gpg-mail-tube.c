@@ -37,6 +37,7 @@
 #include "../common/ccparray.h"
 #include "../common/mbox-util.h"
 #include "../common/zb32.h"
+#include "../common/i18n.h"
 #include "rfc822parse.h"
 #include "mime-maker.h"
 
@@ -256,6 +257,7 @@ main (int argc, char **argv)
   log_set_prefix ("gpg-mail-tube", GPGRT_LOG_WITH_PREFIX);
 
   /* Make sure that our subsystems are ready.  */
+  i18n_init();  /* Required for gnupg_get_template.  */
   init_common_subsystems (&argc, &argv);
 
   /* Parse the command line. */
@@ -369,6 +371,18 @@ main (int argc, char **argv)
 }
 
 
+/* Return true if STRING has only ascii characters or is NULL.  */
+static int
+only_ascii (const char *string)
+{
+  if (string)
+    for ( ; *string; string++)
+      if ((*string & 0x80))
+        return 0;
+  return 1;
+}
+
+
 /* This function is called by the mail parser to communicate events.
  * This callback communicates with the main function using a structure
  * passed in OPAQUE. Should return 0 or set errno and return -1. */
@@ -429,7 +443,7 @@ mail_tube_encrypt (estream_t fpin, strlist_t recipients)
   gpgrt_process_t proc = NULL;
   int exitcode;
   int i, found;
-  int ct_text = 0;
+  int ct_is_text = 0;
 
   ctx->msg = rfc822parse_open (mail_tube_message_cb, ctx);
   if (!ctx->msg)
@@ -502,9 +516,12 @@ mail_tube_encrypt (estream_t fpin, strlist_t recipients)
       const char *media;
 
       field = rfc822parse_parse_field (ctx->msg, "Content-Type", -1);
-      if (field && (media = rfc822parse_query_media_type (field, NULL))
-          && !strcmp (media, "text"))
-        ct_text = 1;
+      if (!field)
+        ct_is_text = 1;  /* Assumed CT is text/plain.  */
+      else if ((media = rfc822parse_query_media_type (field, NULL))
+               && !strcmp (media, "text"))
+        ct_is_text = 1;
+
       rfc822parse_release_field (field);
     }
 
@@ -546,33 +563,61 @@ mail_tube_encrypt (estream_t fpin, strlist_t recipients)
   /* Output the plain or PGP/MIME boilerplate.  */
   if (opt.as_attach)
     {
+      char *templ, *tmpstr;
+      const char *charset = "us-ascii";
+      const char *ctencode = "";
+
+      templ = gnupg_get_template ("mail-tube",
+                                  ct_is_text? "encrypted-file-attached"
+                                            : "encrypted-mail-attached",
+                                  (GET_TEMPLATE_SUBST_ENVVARS
+                                   | GET_TEMPLATE_CRLF),
+                                  NULL);
+      if (templ && !only_ascii (templ))
+        {
+          charset = "utf-8";
+          ctencode = "Content-Transfer-Encoding: quoted-printable\r\n";
+          tmpstr = mime_maker_qp_encode (templ);
+          if (!tmpstr)
+            {
+              log_error ("QP encoding failed: %s\n",
+                         gpg_strerror (gpg_error_from_syserror ()));
+              exit (1);
+            }
+          xfree (templ);
+          templ = tmpstr;
+        }
       es_fprintf (es_stdout,
                   "\r\n"
                   "\r\n"
                   "--=-=mt-%s=-=\r\n"
-                  "Content-Type: text/plain; charset=us-ascii\r\n"
+                  "Content-Type: text/plain; charset=%s\r\n"
+                  "%s"
                   "Content-Disposition: inline\r\n"
                   "\r\n"
-                  "Please find attached an encrypted %s.\r\n"
+                  "%s"
                   "\r\n"
                   "--=-=mt-%s=-=\r\n",
                   boundary,
-                  ct_text? "file":"message",
+                  charset, ctencode,
+                  templ? templ
+                       : "Please find attached an encrypted file/mail.\r\n",
                   boundary);
-      if (ct_text)
+      xfree (templ);
+      if (ct_is_text)
         es_fprintf (es_stdout,
                     "Content-Type: text/plain; charset=us-ascii\r\n"
                     "Content-Description: PGP encrypted file\r\n"
                     "Content-Disposition: attachment; filename=\"%s\"\r\n"
-                    "\r\n", "pgp-encrypted-file.asc");
+                    "\r\n", "pgp-encrypted-file.txt.asc");
       else
         es_fprintf (es_stdout,
-                    "Content-Type: message/rfc822\r\n"
+                    "Content-Type: text/plain; charset=us-ascii\r\n"
                     "Content-Description: PGP encrypted message\r\n"
                     "Content-Disposition: attachment; filename=\"%s\"\r\n"
                     "\r\n", "pgp-encrypted-msg.eml.asc");
     }
-  else
+  else /* PGP/MIME */
     es_fprintf (es_stdout,
               "\r\n"
               "\r\n"
@@ -596,18 +641,19 @@ mail_tube_encrypt (estream_t fpin, strlist_t recipients)
       goto leave;
     }
 
-  if (opt.as_attach && ct_text)
+  if (opt.as_attach && ct_is_text)
     {
       /* No headers at all; write as plain file and ignore the encoding.  */
       /* FIXME: Should we do a base64 or QP decoding?  */
     }
   else
     {
-      /* Write new mime headers using the old content-* values.  */
+      /* Write new mime headers using the original content-* values.  */
       for (i=0; i < DIM (ct_names); i++)
         {
           line = rfc822parse_get_field (ctx->msg, ct_names[i], -1, NULL);
-          log_debug ("OLD CT is '%s'\n", line);
+          if (opt.verbose)
+            log_info ("original Content-type is '%s'\n", line);
           if (line)
             {
               es_fprintf (gpginfp, "%s\r\n", line);

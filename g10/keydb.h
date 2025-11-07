@@ -37,14 +37,14 @@
                           || IS_SUBKEY_REV(s) \
                           || IS_ATTST_SIGS(s) )
 #define IS_SIG(s)        (!IS_CERT(s))
-#define IS_KEY_SIG(s)    ((s)->sig_class == 0x1f)
-#define IS_UID_SIG(s)    (((s)->sig_class & ~3) == 0x10)
+#define IS_KEY_SIG(s)    ((s)->sig_class == SIGCLASS_KEY)
+#define IS_UID_SIG(s)    (((s)->sig_class & ~3) == SIGCLASS_CERT)
 #define IS_ATTST_SIGS(s) ((s)->sig_class == 0x16)
-#define IS_SUBKEY_SIG(s) ((s)->sig_class == 0x18)
-#define IS_BACK_SIG(s)   ((s)->sig_class == 0x19)
-#define IS_KEY_REV(s)    ((s)->sig_class == 0x20)
-#define IS_UID_REV(s)    ((s)->sig_class == 0x30)
-#define IS_SUBKEY_REV(s) ((s)->sig_class == 0x28)
+#define IS_SUBKEY_SIG(s) ((s)->sig_class == SIGCLASS_SUBKEY)
+#define IS_BACK_SIG(s)   ((s)->sig_class == SIGCLASS_BACKSIG)
+#define IS_KEY_REV(s)    ((s)->sig_class == SIGCLASS_KEYREV)
+#define IS_UID_REV(s)    ((s)->sig_class == SIGCLASS_CERTREV)
+#define IS_SUBKEY_REV(s) ((s)->sig_class == SIGCLASS_SUBREV)
 
 struct getkey_ctx_s;
 typedef struct getkey_ctx_s *GETKEY_CTX;
@@ -332,9 +332,15 @@ void getkey_disable_caches(void);
 /* Return the public key used for signature SIG and store it at PK.  */
 gpg_error_t get_pubkey_for_sig (ctrl_t ctrl,
                                 PKT_public_key *pk, PKT_signature *sig,
-                                PKT_public_key *forced_pk);
+                                PKT_public_key *forced_pk,
+                                kbnode_t *r_keyblock);
 
-/* Return the public key with the key id KEYID and store it at PK.  */
+/* Return the public key with the key id KEYID and store it at PK.
+ * Optionally return the entire keyblock.  */
+gpg_error_t get_pubkey_bykid (ctrl_t ctrl, PKT_public_key *pk,
+                              kbnode_t *r_keyblock, u32 *keyid);
+
+/* Same as get_pubkey_bykid but w/o r_keyblock.  */
 int get_pubkey (ctrl_t ctrl, PKT_public_key *pk, u32 *keyid);
 
 /* Same as get_pubkey but with auto LDAP fetch.  */
@@ -422,6 +428,7 @@ gpg_error_t get_pubkey_byfpr_fast (ctrl_t ctrl, PKT_public_key *pk,
 gpg_error_t get_keyblock_byfpr_fast (ctrl_t ctrl,
                                      kbnode_t *r_keyblock,
                                      KEYDB_HANDLE *r_hd,
+                                     int primary_only,
                                      const byte *fpr, size_t fprlen,
                                      int lock);
 

@@ -60,6 +60,7 @@
 #define PUBKEY_USAGE_RENC    1024                /* Restricted encryption.  */
 #define PUBKEY_USAGE_TIME    2048                /* Timestamp use.  */
 
+#define PUBKEY_USAGE_VERIFY  16384               /* Verify only modifier.  */
 
 /* The usage bits which can be derived from the algo.  */
 #define PUBKEY_USAGE_BASIC_MASK  (PUBKEY_USAGE_SIG|PUBKEY_USAGE_ENC\
@@ -67,6 +68,21 @@
 
 /* The usage bits which define encryption.  */
 #define PUBKEY_USAGE_XENC_MASK  (PUBKEY_USAGE_ENC | PUBKEY_USAGE_RENC)
+
+/* The signature classes.  */
+#define SIGCLASS_DATA    0x00   /* Signature on a binary document.       */
+#define SIGCLASS_TEXT    0x01   /* Signature on a text document.         */
+#define SIGCLASS_SALONE  0x02   /* Standalone signature.                 */
+#define SIGCLASS_CERT    0x10   /* User ID certification signature.      */
+#define SIGCLASS_CERT11  0x11   /* User ID certification signature.      */
+#define SIGCLASS_CERT12  0x12   /* User ID certification signature.      */
+#define SIGCLASS_CERT13  0x13   /* User ID certification signature.      */
+#define SIGCLASS_SUBKEY  0x18   /* Key binding signature.                */
+#define SIGCLASS_BACKSIG 0x19   /* Primary key binding signature.        */
+#define SIGCLASS_KEY     0x1f   /* Direct key signature (on primary key) */
+#define SIGCLASS_KEYREV  0x20   /* Key revoction signature.              */
+#define SIGCLASS_SUBREV  0x28   /* Subkey revocation signature.          */
+#define SIGCLASS_CERTREV 0x30   /* Certification revocation signature.   */
 
 /* Bitflags to convey hints on what kind of signature is created.  */
 #define SIGNHINT_KEYSIG  1
@@ -131,9 +147,9 @@ typedef struct {
      S2K function on the password is the session key. See RFC 4880,
      Section 5.3.)  */
   byte seskeylen;
-  /* The session key as encrypted by the S2K specifier.  For AEAD this
-   * includes the nonce and the authentication tag.  */
-  byte seskey[1];
+  /* The malloced session key as encrypted by the S2K specifier.  For
+   * AEAD this includes the nonce and the authentication tag.  */
+  byte *seskey;
 } PKT_symkey_enc;
 
 /* A public-key encrypted session key packet as defined in RFC 4880,
@@ -150,17 +166,34 @@ typedef struct {
   /* Whether to hide the key id.  This value is not directly
      serialized.  */
   byte    throw_keyid;
-  /* The session key.  */
+  /* The encrypted session key.  */
   gcry_mpi_t     data[PUBKEY_MAX_NENC];
 } PKT_pubkey_enc;
 
 
-/* An object to build a list of public-key encrypted session key.  */
-struct pubkey_enc_list
+/* An object to build a list of public-key and symkey encrypted
+ * session key.  Note that we use a dedicated union here instead of
+ * the usual PACKET type to avoid the need for extra allocations. */
+struct seskey_enc_list
 {
-  struct pubkey_enc_list *next;
-  int result;
-  PKT_pubkey_enc d;
+  struct seskey_enc_list *next;
+  int result; /* The error code decrypting the session key.  */
+  int u_sym;  /* Use the sym member.  */
+  union {
+    PKT_pubkey_enc pub;
+    PKT_symkey_enc sym;
+  } u;
+};
+
+
+/* An object to record some properties of a PKT_pubkey_enc packet.  */
+struct pubkey_enc_info_item
+{
+  struct pubkey_enc_info_item *next;
+  /* 3 fields copied from a PKT_pubkey_enc:  */
+  u32     keyid[2];
+  byte    version;
+  byte    pubkey_algo;
 };
 
 
@@ -338,12 +371,20 @@ typedef struct
 
 struct revoke_info
 {
-  /* revoked at this date */
+  /* Revoked at this date */
   u32 date;
-  /* the keyid of the revoking key (selfsig or designated revoker) */
+  /* The keyid of the revoking key (selfsig or designated revoker) */
   u32 keyid[2];
-  /* the algo of the revoking key */
+  /* A malloced string of len reason_comment_len with the raw reason
+   * string or NULL if not given.  */
+  char *reason_comment;
+  size_t reason_comment_len;
+  /* The algo of the revoking key */
   byte algo;
+  /* The reason code. */
+  byte reason_code;
+  /* Whether the above reason fields are valid. */
+  byte got_reason;
 };
 
 
@@ -400,11 +441,10 @@ typedef struct
      when serializing.  (Serialized.)  */
   byte    version;
   byte    selfsigversion; /* highest version of all of the self-sigs */
-  /* The public key algorithm.  (Serialized.)  */
-  byte    pubkey_algo;
-  u16     pubkey_usage;   /* carries the usage info.            */
-  byte    req_usage;      /* hack to pass a request to getkey() */
   byte    fprlen;         /* 0 or length of FPR.  */
+  byte    pubkey_algo;    /* The public key algorithm.  (PGP format)  */
+  u16     pubkey_usage;   /* carries the usage info.            */
+  u16     req_usage;      /* hack to pass a request to getkey() */
   u32     has_expired;    /* set to the expiration date if expired */
   /* keyid of the primary key.  Never access this value directly.
      Instead, use pk_main_keyid().  */
@@ -585,7 +625,7 @@ struct packet_struct {
 	PKT_comment	*comment;	/* PKT_COMMENT */
 	PKT_user_id	*user_id;	/* PKT_USER_ID */
 	PKT_compressed	*compressed;	/* PKT_COMPRESSED */
-	PKT_encrypted	*encrypted;	/* PKT_ENCRYPTED[_MDC] */
+	PKT_encrypted	*encrypted;	/* PKT_ENCRYPTED[_MDC|_AEAD] */
 	PKT_mdc 	*mdc;		/* PKT_MDC */
 	PKT_plaintext	*plaintext;	/* PKT_PLAINTEXT */
         PKT_gpg_control *gpg_control;   /* PKT_GPG_CONTROL */
@@ -646,7 +686,7 @@ int proc_signature_packets_by_fd (ctrl_t ctrl, void *anchor, IOBUF a,
                                   gnupg_fd_t signed_data_fd);
 gpg_error_t proc_encryption_packets (ctrl_t ctrl, void *ctx, iobuf_t a,
                                      DEK **r_dek,
-                                     struct pubkey_enc_list **r_list);
+                                     struct seskey_enc_list **r_list);
 
 int list_packets( iobuf_t a );
 
@@ -891,6 +931,7 @@ void build_attribute_subpkt(PKT_user_id *uid,byte type,
 			    const void *buf,u32 buflen,
 			    const void *header,u32 headerlen);
 struct notation *string_to_notation(const char *string,int is_utf8);
+struct notation *name_value_to_notation (const char *name, const char *value);
 struct notation *blob_to_notation(const char *name,
                                   const char *data, size_t len);
 struct notation *sig_to_notation(PKT_signature *sig);
@@ -921,31 +962,29 @@ PKT_public_key *copy_public_key( PKT_public_key *d, PKT_public_key *s );
 PKT_signature *copy_signature( PKT_signature *d, PKT_signature *s );
 PKT_user_id *scopy_user_id (PKT_user_id *sd );
 
+void free_seskey_enc_list (struct seskey_enc_list *sesenc_list);
+
 int cmp_public_keys( PKT_public_key *a, PKT_public_key *b );
 int cmp_signatures( PKT_signature *a, PKT_signature *b );
 int cmp_user_ids( PKT_user_id *a, PKT_user_id *b );
 
 
 /*-- sig-check.c --*/
-/* Check a signature.  This is shorthand for check_signature2 with
-   the unnamed arguments passed as NULL.  */
-int check_signature (ctrl_t ctrl, PKT_signature *sig, gcry_md_hd_t digest);
-
 /* Check a signature.  Looks up the public key from the key db.  (If
  * R_PK is not NULL, it is stored at RET_PK.)  DIGEST contains a
  * valid hash context that already includes the signed data.  This
  * function adds the relevant meta-data to the hash before finalizing
  * it and verifying the signature.  FOCRED_PK is usually NULL. */
-gpg_error_t check_signature2 (ctrl_t ctrl,
+gpg_error_t check_signature (ctrl_t ctrl,
                               PKT_signature *sig, gcry_md_hd_t digest,
                               const void *extrahash, size_t extrahashlen,
                               PKT_public_key *forced_pk,
                               u32 *r_expiredate, int *r_expired, int *r_revoked,
-                              PKT_public_key **r_pk);
+                             PKT_public_key **r_pk, kbnode_t *r_keyblock);
 
 
 /*-- pubkey-enc.c --*/
-gpg_error_t get_session_key (ctrl_t ctrl, struct pubkey_enc_list *k, DEK *dek);
+gpg_error_t get_session_key (ctrl_t ctrl, struct seskey_enc_list *k, DEK *dek);
 gpg_error_t get_override_session_key (DEK *dek, const char *string);
 
 /*-- compress.c --*/

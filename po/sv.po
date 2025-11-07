@@ -617,6 +617,11 @@ msgstr ""
 msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "en gpg-agent är redan igång - startar inte en till\n"
 
+#, fuzzy, c-format
+#| msgid "key %s: removed multiple subkey binding\n"
+msgid "socket file removed - retrying binding\n"
+msgstr "nyckel %s: tog bort flera undernyckelbindningar\n"
+
 # Jag har valt att inte översätta nonce. Nonce är data eller information som endast används en gång
 #, c-format
 msgid "error getting nonce for the socket\n"
@@ -870,6 +875,11 @@ msgstr "ändra lösenfras"
 
 msgid "I'll change it later"
 msgstr "Jag ändrar den senare"
+
+#, fuzzy, c-format
+#| msgid "receiving line failed: %s\n"
+msgid "Unprotecting key failed: %s\n"
+msgstr "mottagande rad misslyckades: %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr "Mata in kortet med serienummer"
@@ -1548,6 +1558,20 @@ msgstr "tvingad"
 msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr ""
 
+#, fuzzy, c-format
+#| msgid ""
+#| "Please note that the factory settings of the PINs are\n"
+#| "   PIN = `%s'     Admin PIN = `%s'\n"
+#| "You should change them using the command --change-pin\n"
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+"Observera dock att fabriksinställningarna för PIN-koderna är\n"
+"   PIN-kod = \"%s\"     Admin PIN-kod = \"%s\"\n"
+"Du bör ändra dem med kommandot --change-pin\n"
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr "Fel: Endast ren ASCII tillåts för närvarande.\n"
 
@@ -1724,20 +1748,6 @@ msgstr "OBSERVERA: nycklar har redan lagrats på kortet!\n"
 msgid "Replace existing keys? (y/N) "
 msgstr "Ersätt existerande nycklar? (j/N) "
 
-#, fuzzy, c-format
-#| msgid ""
-#| "Please note that the factory settings of the PINs are\n"
-#| "   PIN = `%s'     Admin PIN = `%s'\n"
-#| "You should change them using the command --change-pin\n"
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-"Observera dock att fabriksinställningarna för PIN-koderna är\n"
-"   PIN-kod = \"%s\"     Admin PIN-kod = \"%s\"\n"
-"Du bör ändra dem med kommandot --change-pin\n"
-
 msgid "Please select the type of key to generate:\n"
 msgstr "Välj vilken typ av nyckel som ska genereras:\n"
 
@@ -1874,7 +1884,7 @@ msgstr "Ogiltigt kommando (prova med \"help\")\n"
 
 #, fuzzy, c-format
 #| msgid "key operation not possible: %s\n"
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "nyckelåtgärden är inte möjlig: %s\n"
 
 #, fuzzy
@@ -2047,6 +2057,11 @@ msgstr "Antal mottagare"
 #| msgid "you may not use %s while in %s mode\n"
 msgid "option '%s' may not be used in %s mode\n"
 msgstr "du kan inte använda %s när du är i %s-läget\n"
+
+#, fuzzy, c-format
+#| msgid "can't connect to `%s': %s\n"
+msgid "already encrypted to %08lX\n"
+msgstr "kan inte ansluta till \"%s\": %s\n"
 
 #, fuzzy, c-format
 #| msgid "%s encrypted data\n"
@@ -2261,6 +2276,11 @@ msgstr "signera en nyckel"
 #| msgid "sign a key locally"
 msgid "quickly sign a key locally"
 msgstr "signera en nyckel lokalt"
+
+#, fuzzy
+#| msgid "sign selected user IDs with a trust signature"
+msgid "quickly sign a key with a trust signature"
+msgstr "signera valda användaridentiteter med en tillitssignatur"
 
 #, fuzzy
 #| msgid "generate a new key pair"
@@ -2623,6 +2643,11 @@ msgstr "lista inställningar (expertläge)"
 msgid "show ownertrust"
 msgstr "ändra ägartillitsvärdet"
 
+#, fuzzy
+#| msgid "Critical signature notation: "
+msgid "show trust signature information"
+msgstr "Kritisk signaturnotation: "
+
 #, fuzzy, c-format
 #| msgid "unknown option `%s'\n"
 msgid "unknown TOFU policy '%s'\n"
@@ -2984,6 +3009,9 @@ msgstr "|FD|skriv statusinformation till denna FD"
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr ""
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr ""
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "Användning: gpgv [flaggor] [filer] (-h för hjälp)"
 
@@ -3053,6 +3081,11 @@ msgstr "anta att inmatning är i binärformat"
 #| msgid "show key fingerprint"
 msgid "repair keys on import"
 msgstr "visa nyckelns fingeravtryck"
+
+#, fuzzy
+#| msgid "list secret keys"
+msgid "do not import secret keys"
+msgstr "lista hemliga nycklar"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -3330,10 +3363,6 @@ msgstr "Användaridentiteten är inte längre giltig"
 #, c-format
 msgid "reason for revocation: "
 msgstr "anledning för spärrning: "
-
-#, c-format
-msgid "revocation comment: "
-msgstr "spärrningskommentar: "
 
 #, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -4074,6 +4103,11 @@ msgstr "Ingen sådan användaridentitet.\n"
 msgid "Nothing to sign.\n"
 msgstr "Det finns inget att signera med nyckeln %s\n"
 
+#, fuzzy, c-format
+#| msgid "checking created signature failed: %s\n"
+msgid "creating key signature failed: %s\n"
+msgstr "kontroll av den skapade signaturen misslyckades: %s\n"
+
 #, c-format
 msgid "Not signed by you.\n"
 msgstr "Inte signerad av dig.\n"
@@ -4642,6 +4676,11 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) Befintlig nyckel från kort\n"
 
 #, fuzzy, c-format
+#| msgid "   (%d) DSA and Elgamal\n"
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "   (%d) DSA och Elgamal\n"
+
+#, fuzzy, c-format
 #| msgid "   (%d) RSA (encrypt only)\n"
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) RSA (endast kryptering)\n"
@@ -4687,6 +4726,11 @@ msgstr "Den efterfrågade nyckelstorleken är %u bitar\n"
 #, fuzzy
 #| msgid "Please select what kind of key you want:\n"
 msgid "Please select which elliptic curve you want:\n"
+msgstr "Välj vilken typ av nyckel du vill ha:\n"
+
+#, fuzzy, c-format
+#| msgid "Please select what kind of key you want:\n"
+msgid "Please select the %s variant you want:\n"
 msgstr "Välj vilken typ av nyckel du vill ha:\n"
 
 # borde kolla upp möjligheterna i källkoden att använda v m å istället för wmy
@@ -4925,6 +4969,12 @@ msgstr "kan inte skapa säkerhetskopian \"%s\": %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "OBSERVERA: säkerhetskopia av kortnyckeln sparades i \"%s\"\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+
 #, fuzzy, c-format
 #| msgid "writing public key to `%s'\n"
 msgid "writing public key to '%s'\n"
@@ -5040,6 +5090,10 @@ msgstr[1] ""
 msgid "Keyring"
 msgstr "Nyckelring"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "spärrningskommentar: "
+
 msgid "Revocable by: "
 msgstr ""
 
@@ -5115,6 +5169,9 @@ msgstr "hämta automatiskt nycklar vid validering av signaturer"
 msgid "honor the preferred keyserver URL set on the key"
 msgstr "respektera föredragen nyckelserver-url inställd i nyckeln"
 
+msgid "update a key before sending it"
+msgstr ""
+
 msgid "disabled"
 msgstr "inaktiverad"
 
@@ -5128,6 +5185,11 @@ msgstr "ogiltigt nyckelserverprotokoll (vi %d!=hanterare %d)\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr "\"%s\" inte ett nyckel-id: hoppar över\n"
+
+#, fuzzy, c-format
+#| msgid "invalid fingerprint"
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "ogiltigt fingeravtryck"
 
 #, fuzzy, c-format
 #| msgid "refreshing %d keys from %s\n"
@@ -5156,6 +5218,10 @@ msgstr "begär nyckeln %s från %s\n"
 #| msgid "no keyserver action!\n"
 msgid "no keyserver known\n"
 msgstr "ingen nyckelserveråtgärd!\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr ""
 
 #, c-format
 msgid "skipped \"%s\": %s\n"
@@ -5505,6 +5571,11 @@ msgstr "okomprimerad|ingen"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "detta meddelande kanske inte kan användas av %s\n"
+
+#, fuzzy
+#| msgid "enable key"
+msgid "enabled"
+msgstr "aktivera nyckel"
 
 #, fuzzy, c-format
 #| msgid "ambiguous option `%s'\n"
@@ -6039,6 +6110,12 @@ msgstr "certifikatet är inte användbart för kryptering\n"
 #, c-format
 msgid "okay, we are the anonymous recipient.\n"
 msgstr "ok, vi är den anonyma mottagaren.\n"
+
+# Vad betyder det?
+#, fuzzy, c-format
+#| msgid "WARNING: signing subkey %s is not cross-certified\n"
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr "VARNING: signeringsundernyckeln %s är inte korscertifierad\n"
 
 #, c-format
 msgid "old encoding of the DEK is not supported\n"
@@ -6946,13 +7023,19 @@ msgid_plural " (%d validity counts cleared)\n"
 msgstr[0] "%d nycklar behandlade (%d validity counts rensade)\n"
 msgstr[1] "%d nycklar behandlade (%d validity counts rensade)\n"
 
-#, c-format
-msgid "no ultimately trusted keys found\n"
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s not found\n"
+msgstr "hittade inga nycklar med förbehållslöst förtroende\n"
+
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s expired\n"
 msgstr "hittade inga nycklar med förbehållslöst förtroende\n"
 
 #, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr "publik nyckel för förbehållslöst betrodda nyckeln %s hittades inte\n"
+msgid "no ultimately trusted keys found\n"
+msgstr "hittade inga nycklar med förbehållslöst förtroende\n"
 
 #, c-format
 msgid ""
@@ -8195,10 +8278,10 @@ msgstr "fel vid lagring av flaggor: %s\n"
 msgid "Error - "
 msgstr "Fel - "
 
-#, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr ""
-"GPG_TTY har inte ställts in - använder kanske felaktigt standardvärde\n"
+#, fuzzy, c-format
+#| msgid "error writing to %s: %s\n"
+msgid "error writing to output: %s\n"
+msgstr "fel vid skrivning till %s: %s\n"
 
 #, fuzzy, c-format
 #| msgid "invalid formatted fingerprint in `%s', line %d\n"
@@ -9895,6 +9978,16 @@ msgid "manage the command history"
 msgstr ""
 
 #, c-format
+#~ msgid "GPG_TTY has not been set - using maybe bogus default\n"
+#~ msgstr ""
+#~ "GPG_TTY har inte ställts in - använder kanske felaktigt standardvärde\n"
+
+#, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr ""
+#~ "publik nyckel för förbehållslöst betrodda nyckeln %s hittades inte\n"
+
+#, c-format
 #~ msgid "waiting for process %d to terminate failed: %s\n"
 #~ msgstr ""
 #~ "misslyckades med att vänta på att processen %d skulle avslutas: %s\n"
@@ -10199,11 +10292,6 @@ msgstr ""
 
 #~ msgid "elevate the trust of signatures with valid PKA data"
 #~ msgstr "öka tillit på signaturer med giltigt PKA-data"
-
-#, fuzzy
-#~| msgid "   (%d) DSA and Elgamal\n"
-#~ msgid "   (%d) ECC and ECC\n"
-#~ msgstr "   (%d) DSA och Elgamal\n"
 
 #~ msgid "honor the PKA record set on a key when retrieving keys"
 #~ msgstr "respektera PKA-posten inställd på en nyckel när nycklar hämtas"

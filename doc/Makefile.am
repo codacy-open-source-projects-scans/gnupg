@@ -33,7 +33,9 @@ helpfiles = help.txt help.be.txt help.ca.txt help.cs.txt		\
             help.gl.txt help.hu.txt help.id.txt help.it.txt		\
             help.ja.txt help.nb.txt help.pl.txt help.pt.txt		\
             help.pt_BR.txt help.ro.txt help.ru.txt help.sk.txt		\
-            help.sv.txt help.tr.txt help.zh_CN.txt help.zh_TW.txt
+            help.sv.txt help.tr.txt help.zh_CN.txt help.zh_TW.txt       \
+            mail-tube.txt mail-tube.de.txt \
+            wks-utils.txt wks-utils.de.txt
 
 EXTRA_DIST = samplekeys.asc mksamplekeys com-certs.pem \
 	     gnupg-logo.pdf gnupg-logo.png gnupg-logo-tr.png \
@@ -93,9 +95,10 @@ myhtmlman_pages = \
                 gpgtar.1.html gpg-mail-tube.1.html \
 		applygnupgdefaults.8.html gpg-wks-client.1.html \
                 gpg-wks-server.1.html \
-		dirmngr-client.1.html gpg-card.1.html gpg-check-pattern.1.html
+		dirmngr-client.1.html gpg-card.1.html gpg-check-pattern.1.html \
+		gnupg.7.html
 
-man_MANS = $(myman_pages) gnupg.7 gnupg.7.html
+man_MANS = $(myman_pages) gnupg.7
 
 watchgnupg_SOURCE = gnupg.texi
 
@@ -103,7 +106,7 @@ watchgnupg_SOURCE = gnupg.texi
 CLEANFILES = mkdefsinc defs.inc
 
 DISTCLEANFILES = gnupg.tmp gnupg.ops yat2m-stamp.tmp yat2m-stamp \
-		 $(myman_pages) gnupg.7 gnupg.7.html $(myhtmlman_pages)
+		 $(myman_pages) gnupg.7 $(myhtmlman_pages)
 
 mkdefsinc: mkdefsinc.c Makefile ../config.h
 	$(CC_FOR_BUILD) -I. -I.. -I$(srcdir) $(AM_CPPFLAGS) \
@@ -148,7 +151,7 @@ yat2m-stamp: $(myman_sources) defs.inc
 	@mv -f yat2m-stamp.tmp $@
 
 
-$(myman_pages) $(myhtmlman_pages) gnupg.7 gnupg.7.html : yat2m-stamp defs.inc
+$(myman_pages) $(myhtmlman_pages) gnupg.7 : yat2m-stamp defs.inc
 	@if test -f $@; then :; else \
             trap 'rm -rf yat2m-stamp yat2m-lock' 1 2 13 15; \
                if mkdir yat2m-lock 2>/dev/null; then \

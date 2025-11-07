@@ -554,7 +554,7 @@ inq_ciphertext_cb (void *opaque, const char *line)
    the hex string KEYGRIP. */
 int
 gpgsm_agent_pkdecrypt (ctrl_t ctrl, const char *keygrip, const char *desc,
-                       ksba_const_sexp_t ciphertext,
+                       int use_kem, ksba_const_sexp_t ciphertext,
                        char **r_buf, size_t *r_buflen )
 {
   int rc;
@@ -601,7 +601,7 @@ gpgsm_agent_pkdecrypt (ctrl_t ctrl, const char *keygrip, const char *desc,
   cipher_parm.ctx = agent_ctx;
   cipher_parm.ciphertext = ciphertext;
   cipher_parm.ciphertextlen = ciphertextlen;
-  rc = assuan_transact (agent_ctx, "PKDECRYPT",
+  rc = assuan_transact (agent_ctx, use_kem? "PKDECRYPT --kem=CMS": "PKDECRYPT",
                         put_membuf_cb, &data,
                         inq_ciphertext_cb, &cipher_parm, NULL, NULL);
   if (rc)
@@ -680,8 +680,8 @@ inq_genkey_parms (void *opaque, const char *line)
 
 
 /* Call the agent to generate a new key */
-int
-gpgsm_agent_genkey (ctrl_t ctrl,
+gpg_error_t
+gpgsm_agent_genkey (ctrl_t ctrl, int no_protection,
                     ksba_const_sexp_t keyparms, ksba_sexp_t *r_pubkey)
 {
   int rc;
@@ -709,7 +709,9 @@ gpgsm_agent_genkey (ctrl_t ctrl,
   if (!gk_parm.sexplen)
     return gpg_error (GPG_ERR_INV_VALUE);
   gnupg_get_isotime (timebuf);
-  snprintf (line, sizeof line, "GENKEY --timestamp=%s", timebuf);
+  snprintf (line, sizeof line, "GENKEY%s --timestamp=%s",
+            no_protection? " --no-protection":"",
+            timebuf);
   rc = assuan_transact (agent_ctx, line,
                         put_membuf_cb, &data,
                         inq_genkey_parms, &gk_parm, NULL, NULL);
@@ -968,6 +970,8 @@ istrusted_status_cb (void *opaque, const char *line)
         parm->flags.chain_model = 1;
       else if (has_leading_keyword (line, "qual"))
         parm->flags.qualified = 1;
+      else if (has_leading_keyword (line, "noconsent"))
+        parm->flags.noconsent = 1;
       else if (has_leading_keyword (line, "de-vs"))
         parm->flags.de_vs = 1;
 
@@ -977,6 +981,9 @@ istrusted_status_cb (void *opaque, const char *line)
     }
   else if ((s = has_leading_keyword (line, "TRUSTLISTFPR")) && *s)
     {
+      /* We see this only with the "LISTTRUSTED --status" command but
+       * not with ISTRUSTED.  Thus the cache will only be filled by
+       * the former command. */
       istrusted_cache_t ci;
 
       ci = xtrymalloc (sizeof *ci + strlen (s));
@@ -986,6 +993,9 @@ istrusted_status_cb (void *opaque, const char *line)
       memset (&ci->flags, 0, sizeof ci->flags);
       ci->next = parm->cache;
       parm->cache = ci;
+      /* Also need to clear the parm's flags which will be copied to
+       * the cache.  */
+      memset (&parm->flags, 0, sizeof ci->flags);
     }
   return 0;
 }
@@ -1273,14 +1283,17 @@ learn_cb (void *opaque, const void *buffer, size_t length)
   return 0;
 }
 
-/* Call the agent to learn about a smartcard */
+
+/* Call the agent to learn about a smartcard.  If SERIALNO is not NULL
+ * switch to the card with that s/n first.  */
 int
-gpgsm_agent_learn (ctrl_t ctrl)
+gpgsm_agent_learn (ctrl_t ctrl, const char *serialno)
 {
   int rc;
   struct learn_parm_s learn_parm;
   membuf_t data;
   size_t len;
+  char line[ASSUAN_LINELENGTH];
 
   rc = start_agent (ctrl);
   if (rc)
@@ -1295,7 +1308,10 @@ gpgsm_agent_learn (ctrl_t ctrl)
   learn_parm.ctrl = ctrl;
   learn_parm.ctx = agent_ctx;
   learn_parm.data = &data;
-  rc = assuan_transact (agent_ctx, "LEARN --send",
+  snprintf (line, sizeof line, "LEARN --send%s%s",
+            serialno? " -- ":"",
+            serialno? serialno:"");
+  rc = assuan_transact (agent_ctx, line,
                         learn_cb, &learn_parm,
                         NULL, NULL,
                         learn_status_cb, &learn_parm);

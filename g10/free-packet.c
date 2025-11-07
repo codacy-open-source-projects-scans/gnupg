@@ -49,8 +49,11 @@ my_mpi_copy (gcry_mpi_t a)
 void
 free_symkey_enc( PKT_symkey_enc *enc )
 {
-    xfree(enc);
+  if (enc)
+    xfree (enc->seskey);
+  xfree(enc);
 }
+
 
 /* This is the core of free_pubkey_enc but does only release the
  * allocated members of ENC.  */
@@ -161,6 +164,11 @@ release_public_key_parts (PKT_public_key *pk)
       xfree (pk->updateurl);
       pk->updateurl = NULL;
     }
+  if (pk->revoked.reason_comment)
+    {
+      xfree (pk->revoked.reason_comment);
+      pk->revoked.reason_comment = NULL;
+    }
 }
 
 
@@ -231,6 +239,10 @@ copy_public_key_basics (PKT_public_key *d, PKT_public_key *s)
   d->seckey_info = NULL;
   d->user_id = NULL;
   d->prefs = NULL;
+  d->revoked.got_reason = 0;
+  d->revoked.reason_code = 0;
+  d->revoked.reason_comment = NULL;
+  d->revoked.reason_comment_len = 0;
 
   n = pubkey_get_npkey (s->pubkey_algo);
   i = 0;
@@ -274,6 +286,18 @@ copy_public_key (PKT_public_key *d, PKT_public_key *s)
     d->serialno = xstrdup (s->serialno);
   if (s->updateurl)
     d->updateurl = xstrdup (s->updateurl);
+  if (s->revoked.got_reason)
+    {
+      d->revoked.got_reason = s->revoked.got_reason;
+      d->revoked.reason_code = s->revoked.reason_code;
+      if (s->revoked.reason_comment_len)
+        {
+          d->revoked.reason_comment = xmalloc (s->revoked.reason_comment_len);
+          memcpy (d->revoked.reason_comment, s->revoked.reason_comment,
+                  s->revoked.reason_comment_len);
+          d->revoked.reason_comment_len = s->revoked.reason_comment_len;
+        }
+    }
 
   return d;
 }
@@ -514,6 +538,22 @@ free_packet (PACKET *pkt, parse_packet_ctx_t parsectx)
     }
 
   pkt->pkt.generic = NULL;
+}
+
+
+/* Free an entire list of public or symmetric key encrypted data.  */
+void
+free_seskey_enc_list (struct seskey_enc_list *sesenc_list)
+{
+  while (sesenc_list)
+    {
+      struct seskey_enc_list *tmp = sesenc_list->next;
+
+      if (!sesenc_list->u_sym)
+        release_pubkey_enc_parts (&sesenc_list->u.pub);
+      xfree (sesenc_list);
+      sesenc_list = tmp;
+    }
 }
 
 

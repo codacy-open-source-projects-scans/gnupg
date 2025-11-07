@@ -44,6 +44,7 @@
 #include "../common/ttyio.h"
 #include "../common/status.h"
 #include "../common/i18n.h"
+#include "../common/mbox-util.h"
 #include "keyserver-internal.h"
 #include "call-agent.h"
 #include "../common/host2net.h"
@@ -52,6 +53,7 @@
 #include "key-clean.h"
 #include "keyedit.h"
 
+static void maybe_upload_key (ctrl_t ctrl, kbnode_t keyblock);
 static void show_prefs (PKT_user_id * uid, PKT_signature * selfsig,
 			int verbose);
 static void show_names (ctrl_t ctrl, estream_t fp,
@@ -110,6 +112,13 @@ static void menu_showphoto (ctrl_t ctrl, kbnode_t keyblock);
 static int update_trust = 0;
 
 #define CONTROL_D ('D' - 'A' + 1)
+
+/* Flags values used by sign_uids().  */
+#define SIGN_UIDS_LOCAL         1  /* Create non-exportable sig.    */
+#define SIGN_UIDS_NONREVOCABLE  2  /* Create non-revocable sig.     */
+#define SIGN_UIDS_TRUSTSIG      4  /* Create trust signature.       */
+#define SIGN_UIDS_INTERACTIVE   8  /* Change the way of prompting.  */
+#define SIGN_UIDS_QUICK        16  /* Called by a --quick command.  */
 
 struct sign_attrib
 {
@@ -291,7 +300,9 @@ keyedit_print_one_sig (ctrl_t ctrl, estream_t fp,
 		       ((opt.
 			 list_options & LIST_SHOW_STD_NOTATIONS) ? 1 : 0) +
 		       ((opt.
-			 list_options & LIST_SHOW_USER_NOTATIONS) ? 2 : 0));
+			 list_options & LIST_SHOW_USER_NOTATIONS) ? 2 : 0) +
+                       ((opt.
+                         list_options & LIST_SHOW_HIDDEN_NOTATIONS) ? 4:0));
 
       if (sig->flags.pref_ks
           && ((opt.list_options & LIST_SHOW_KEYSERVER_URLS) || extended))
@@ -373,6 +384,92 @@ sign_mk_attrib (PKT_signature * sig, void *opaque)
 }
 
 
+/* Parse a trust signature specification string into the 3 return
+ * args.  Returns 0 on success or an errorcode.  Format for the string
+ * is
+ *  ['T=']<depth>,<value>[,<domain>]
+ * The optional prefix is just to allow c+p from the --check-sigs
+ * output.  The domain is optional, <depth> must be a value in the
+ * range 0 to 255, value may either be value in the same range or -
+ * preferred - 'm' or 'f'.
+ */
+static gpg_error_t
+parse_trustsig_string (const char *string,
+                       byte *trust_value, byte *trust_depth, char **regexp)
+{
+  gpg_error_t err = 0;
+  char **fields;
+  int nfields;
+  int along;
+  char *endp;
+
+  *trust_value = 0;
+  *trust_depth = 0;
+  *regexp = NULL;
+
+  if (!string)
+    return gpg_error (GPG_ERR_INV_ARG);
+
+  if (*string == 'T' && string[1] == '=')
+    string += 2;
+
+  fields = strtokenize (string, ",");
+  if (!fields)
+      return gpg_error_from_syserror ();
+
+  for (nfields=0; fields[nfields]; nfields++)
+    ;
+  if (nfields < 2 || nfields > 3)
+    {
+      err = gpg_error (GPG_ERR_SYNTAX);
+      goto leave;
+    }
+  along = strtol (fields[0], &endp, 10);
+  if (along < 0 || along > 255 || fields[0] == endp || *endp)
+    {
+      err = gpg_error (GPG_ERR_ERANGE);
+      goto leave;
+    }
+  *trust_depth = along;
+  if (!strcmp (fields[1], "m")|| !strcmp (fields[1], "marginal"))
+    along = 60;
+  else if (!strcmp (fields[1], "f")|| !strcmp (fields[1], "full"))
+    along = 120;
+  else
+    {
+      along = strtol (fields[1], &endp, 10);
+      if (along < 0 || along > 255 || fields[1] == endp || *endp)
+        {
+          err = gpg_error (GPG_ERR_ERANGE);
+          goto leave;
+        }
+    }
+  *trust_value = along;
+
+  if (nfields == 3)
+    {
+      if (!is_valid_domain_name (fields[2]))
+        err = gpg_error (GPG_ERR_NO_NAME);
+      else
+        {
+          *regexp = strconcat ("<[^>]+[@.]", fields[2], ">$", NULL);
+          if (!*regexp)
+            err = gpg_error_from_syserror ();
+        }
+    }
+
+ leave:
+  xfree (fields);
+  if (err && *regexp)
+    {
+      xfree (*regexp);
+      *regexp = NULL;
+    }
+  return err;
+}
+
+
+/* Interactive version of parse_trustsig_string.  */
 static void
 trustsig_prompt (byte * trust_value, byte * trust_depth, char **regexp)
 {
@@ -474,16 +571,17 @@ trustsig_prompt (byte * trust_value, byte * trust_depth, char **regexp)
 
 
 /*
- * Loop over all LOCUSR and sign the uids after asking.  If no
- * user id is marked, all user ids will be signed; if some user_ids
- * are marked only those will be signed.  If QUICK is true the
- * function won't ask the user and use sensible defaults.
+ * Loop over all LOCUSR and sign the uids after asking.  If no user id
+ * is marked, all user ids will be signed; if some user_ids are marked
+ * only those will be signed.  FLAGS are the SIGN_UIDS_* constants.
+ * For example with SIGN_UIDS_QUICK the function won't ask the user
+ * and use sensible defaults.  TRUSTSIGSTR is only used if also
+ * SIGN_UIDS_TRUSTSIG is set.
  */
 static int
 sign_uids (ctrl_t ctrl, estream_t fp,
-           kbnode_t keyblock, strlist_t locusr, int *ret_modified,
-	   int local, int nonrevocable, int trust, int interactive,
-           int quick)
+           kbnode_t keyblock, strlist_t locusr, unsigned int flags,
+           const char *trustsigstr, int *ret_modified)
 {
   int rc = 0;
   SK_LIST sk_list = NULL;
@@ -491,7 +589,10 @@ sign_uids (ctrl_t ctrl, estream_t fp,
   PKT_public_key *pk = NULL;
   KBNODE node, uidnode;
   PKT_public_key *primary_pk = NULL;
-  int select_all = !count_selected_uids (keyblock) || interactive;
+  char *trust_regexp = NULL;
+  int select_all = (!count_selected_uids (keyblock)
+                    || (flags & SIGN_UIDS_INTERACTIVE));
+
 
   /* Build a list of all signators.
    *
@@ -508,7 +609,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
   for (sk_rover = sk_list; sk_rover; sk_rover = sk_rover->next)
     {
       u32 sk_keyid[2], pk_keyid[2];
-      char *p, *trust_regexp = NULL;
+      char *p;
       int class = 0, selfsig = 0;
       u32 duration = 0, timestamp = 0;
       byte trust_depth = 0, trust_value = 0;
@@ -564,7 +665,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 
 		      if (selfsig)
 			tty_fprintf (fp, "\n");
-		      else if (opt.expert && !quick)
+		      else if (opt.expert && !(flags & SIGN_UIDS_QUICK))
 			{
 			  tty_fprintf (fp, "\n");
 			  /* No, so remove the mark and continue */
@@ -576,7 +677,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 			      uidnode->flag &= ~NODFLG_MARK_A;
 			      uidnode = NULL;
 			    }
-			  else if (interactive)
+			  else if ((flags & SIGN_UIDS_INTERACTIVE))
 			    yesreally = 1;
 			}
 		      else
@@ -592,7 +693,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 
 		      if (selfsig)
 			tty_fprintf (fp, "\n");
-		      else if (opt.expert && !quick)
+		      else if (opt.expert && !(flags & SIGN_UIDS_QUICK))
 			{
 			  tty_fprintf (fp, "\n");
 			  /* No, so remove the mark and continue */
@@ -604,7 +705,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 			      uidnode->flag &= ~NODFLG_MARK_A;
 			      uidnode = NULL;
 			    }
-			  else if (interactive)
+			  else if ((flags & SIGN_UIDS_INTERACTIVE))
 			    yesreally = 1;
 			}
 		      else
@@ -619,7 +720,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 		      tty_fprintf (fp, _("User ID \"%s\" is not self-signed."),
                                    user);
 
-		      if (opt.expert && !quick)
+		      if (opt.expert && !(flags & SIGN_UIDS_QUICK))
 			{
 			  tty_fprintf (fp, "\n");
 			  /* No, so remove the mark and continue */
@@ -631,7 +732,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 			      uidnode->flag &= ~NODFLG_MARK_A;
 			      uidnode = NULL;
 			    }
-			  else if (interactive)
+			  else if ((flags & SIGN_UIDS_INTERACTIVE))
 			    yesreally = 1;
 			}
 		      else
@@ -642,7 +743,8 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 			}
 		    }
 
-		  if (uidnode && interactive && !yesreally && !quick)
+		  if (uidnode && (flags & SIGN_UIDS_INTERACTIVE)
+                      && !yesreally && !(flags & SIGN_UIDS_QUICK))
 		    {
 		      tty_fprintf (fp,
                                    _("User ID \"%s\" is signable.  "), user);
@@ -671,7 +773,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 
 		  /* It's a v3 self-sig.  Make it into a v4 self-sig? */
 		  if (node->pkt->pkt.signature->version < 4
-                      && selfsig && !quick)
+                      && selfsig && !(flags & SIGN_UIDS_QUICK))
 		    {
 		      tty_fprintf (fp,
                                    _("The self-signature on \"%s\"\n"
@@ -699,7 +801,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 		      tty_fprintf (fp, _("Your current signature on \"%s\"\n"
                                          "has expired.\n"), user);
 
-		      if (quick || cpr_get_answer_is_yes
+		      if ((flags & SIGN_UIDS_QUICK) || cpr_get_answer_is_yes
 			  ("sign_uid.replace_expired_okay",
 			   _("Do you want to issue a "
 			     "new signature to replace "
@@ -718,14 +820,15 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 			}
 		    }
 
-		  if (!node->pkt->pkt.signature->flags.exportable && !local)
+		  if (!node->pkt->pkt.signature->flags.exportable
+                      && !(flags & SIGN_UIDS_LOCAL))
 		    {
 		      /* It's a local sig, and we want to make a
 		         exportable sig. */
 		      tty_fprintf (fp, _("Your current signature on \"%s\"\n"
                                          "is a local signature.\n"), user);
 
-		      if (quick || cpr_get_answer_is_yes
+		      if ((flags & SIGN_UIDS_QUICK) || cpr_get_answer_is_yes
 			  ("sign_uid.local_promote_okay",
 			   _("Do you want to promote "
 			     "it to a full exportable " "signature? (y/N) ")))
@@ -745,7 +848,8 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 
 		  /* Fixme: see whether there is a revocation in which
 		   * case we should allow signing it again. */
-		  if (!node->pkt->pkt.signature->flags.exportable && local)
+		  if (!node->pkt->pkt.signature->flags.exportable
+                      && (flags & SIGN_UIDS_LOCAL))
 		    tty_fprintf ( fp,
                        _("\"%s\" was already locally signed by key %s\n"),
                        user, keystr_from_pk (pk));
@@ -754,8 +858,17 @@ sign_uids (ctrl_t ctrl, estream_t fp,
                                 _("\"%s\" was already signed by key %s\n"),
 				user, keystr_from_pk (pk));
 
-		  if (opt.flags.force_sign_key
-                      || (opt.expert && !quick
+                  if (node->pkt->pkt.signature->digest_algo
+                      == DIGEST_ALGO_SHA1
+                      && !opt.flags.allow_weak_key_signatures)
+                    {
+                      /* Allow updating a signature to a stronger
+                       * digest algorithm without an extra option.  */
+		      xfree (user);
+		      continue;
+                    }
+		  else if (opt.flags.force_sign_key
+                      || (opt.expert && !(flags & SIGN_UIDS_QUICK)
                           && cpr_get_answer_is_yes ("sign_uid.dupe_okay",
                                                     _("Do you want to sign it "
                                                       "again anyway? (y/N) "))))
@@ -805,7 +918,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 	    {
 	      tty_fprintf (fp, _("This key has expired!"));
 
-	      if (opt.expert && !quick)
+	      if (opt.expert && !(flags & SIGN_UIDS_QUICK))
 		{
 		  tty_fprintf (fp, "  ");
 		  if (!cpr_get_answer_is_yes ("sign_uid.expired_okay",
@@ -824,7 +937,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 	      tty_fprintf (fp, _("This key is due to expire on %s.\n"),
                            expirestr_from_pk (primary_pk));
 
-	      if (opt.ask_cert_expire && !quick)
+	      if (opt.ask_cert_expire && !(flags & SIGN_UIDS_QUICK))
 		{
 		  char *answer = cpr_get ("sign_uid.expire",
 					  _("Do you want your signature to "
@@ -851,7 +964,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
          the expiration of the pk */
       if (!duration && !selfsig)
 	{
-	  if (opt.ask_cert_expire && !quick)
+	  if (opt.ask_cert_expire && !(flags & SIGN_UIDS_QUICK))
 	    duration = ask_expire_interval (1, opt.def_cert_expire);
 	  else
 	    duration = parse_expire_string (opt.def_cert_expire);
@@ -861,7 +974,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 	;
       else
 	{
-	  if (opt.batch || !opt.ask_cert_level || quick)
+	  if (opt.batch || !opt.ask_cert_level || (flags & SIGN_UIDS_QUICK))
 	    class = 0x10 + opt.def_cert_level;
 	  else
 	    {
@@ -906,11 +1019,23 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 		}
 	    }
 
-	  if (trust && !quick)
-	    trustsig_prompt (&trust_value, &trust_depth, &trust_regexp);
-	}
+	  if ((flags & SIGN_UIDS_TRUSTSIG))
+            {
+              xfree (trust_regexp);
+              trust_regexp = NULL;
+              if ((flags & SIGN_UIDS_QUICK))
+                {
+                  rc = parse_trustsig_string (trustsigstr, &trust_value,
+                                              &trust_depth, &trust_regexp);
+                  if (rc)
+                    goto leave;
+                }
+              else
+                trustsig_prompt (&trust_value, &trust_depth, &trust_regexp);
+            }
+        }
 
-      if (!quick)
+      if (!(flags & SIGN_UIDS_QUICK))
         {
           p = get_user_id_native (ctrl, sk_keyid);
           tty_fprintf (fp,
@@ -924,14 +1049,14 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 	  tty_fprintf (fp, "\n");
 	  tty_fprintf (fp, _("This will be a self-signature.\n"));
 
-	  if (local)
+	  if ((flags & SIGN_UIDS_LOCAL))
 	    {
 	      tty_fprintf (fp, "\n");
 	      tty_fprintf (fp, _("WARNING: the signature will not be marked "
                                  "as non-exportable.\n"));
 	    }
 
-	  if (nonrevocable)
+	  if ((flags & SIGN_UIDS_NONREVOCABLE))
 	    {
 	      tty_fprintf (fp, "\n");
 	      tty_fprintf (fp, _("WARNING: the signature will not be marked "
@@ -940,14 +1065,14 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 	}
       else
 	{
-	  if (local)
+	  if ((flags & SIGN_UIDS_LOCAL))
 	    {
 	      tty_fprintf (fp, "\n");
 	      tty_fprintf (fp,
                  _("The signature will be marked as non-exportable.\n"));
 	    }
 
-	  if (nonrevocable)
+	  if ((flags & SIGN_UIDS_NONREVOCABLE))
 	    {
 	      tty_fprintf (fp, "\n");
 	      tty_fprintf (fp,
@@ -977,7 +1102,7 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 
       if (opt.batch && opt.answer_yes)
 	;
-      else if (quick)
+      else if ((flags & SIGN_UIDS_QUICK))
         ;
       else if (!cpr_get_answer_is_yes ("sign_uid.okay",
 				       _("Really sign? (y/N) ")))
@@ -999,8 +1124,8 @@ sign_uids (ctrl_t ctrl, estream_t fp,
 
 	      log_assert (primary_pk);
 	      memset (&attrib, 0, sizeof attrib);
-	      attrib.non_exportable = local;
-	      attrib.non_revocable = nonrevocable;
+	      attrib.non_exportable = !!(flags & SIGN_UIDS_LOCAL);
+	      attrib.non_revocable = !!(flags & SIGN_UIDS_NONREVOCABLE);
 	      attrib.trust_depth = trust_depth;
 	      attrib.trust_value = trust_value;
 	      attrib.trust_regexp = trust_regexp;
@@ -1054,6 +1179,8 @@ sign_uids (ctrl_t ctrl, estream_t fp,
     } /* End loop over signators.  */
 
  leave:
+  xfree (trust_regexp);
+  trust_regexp = NULL;
   release_sk_list (sk_list);
   return rc;
 }
@@ -1192,9 +1319,10 @@ fix_keyblock (ctrl_t ctrl, kbnode_t *keyblockp)
 }
 
 
+/* Helper to parse the prefix of the sign command STR and set the
+ * respective bits in R_FLAGS.  Returns false on error.  */
 static int
-parse_sign_type (const char *str, int *localsig, int *nonrevokesig,
-		 int *trustsig)
+parse_sign_type (const char *str, unsigned int *r_flags)
 {
   const char *p = str;
 
@@ -1202,17 +1330,17 @@ parse_sign_type (const char *str, int *localsig, int *nonrevokesig,
     {
       if (ascii_strncasecmp (p, "l", 1) == 0)
 	{
-	  *localsig = 1;
+	  *r_flags |= SIGN_UIDS_LOCAL;
 	  p++;
 	}
       else if (ascii_strncasecmp (p, "nr", 2) == 0)
 	{
-	  *nonrevokesig = 1;
+	  *r_flags |= SIGN_UIDS_NONREVOCABLE;
 	  p += 2;
 	}
       else if (ascii_strncasecmp (p, "t", 1) == 0)
 	{
-	  *trustsig = 1;
+	  *r_flags |= SIGN_UIDS_TRUSTSIG;
 	  p++;
 	}
       else
@@ -1423,6 +1551,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
   char *answer = NULL;
   int redisplay = 1;
   int modified = 0;
+  int upload = 0;  /* Set if the key maybe be uploaded.  */
   int sec_shadowing = 0;
   int run_subkey_warnings = 0;
   int have_commands = !!commands;
@@ -1664,7 +1793,8 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 
 	case cmdSIGN:
 	  {
-	    int localsig = 0, nonrevokesig = 0, trustsig = 0, interactive = 0;
+            unsigned int myflags = 0;
+            int my_modified = 0;
 
 	    if (pk->flags.revoked)
 	      {
@@ -1700,7 +1830,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
                 if (! result)
                   {
                     if (opt.interactive)
-                      interactive = 1;
+                      myflags |= SIGN_UIDS_INTERACTIVE;
                     else
                       {
                         tty_printf (_("Hint: Select the user IDs to sign\n"));
@@ -1710,16 +1840,20 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 
                   }
               }
+
 	    /* What sort of signing are we doing? */
-	    if (!parse_sign_type
-		(answer, &localsig, &nonrevokesig, &trustsig))
+	    if (!parse_sign_type (answer, &myflags))
 	      {
 		tty_printf (_("Unknown signature type '%s'\n"), answer);
 		break;
 	      }
 
-	    sign_uids (ctrl, NULL, keyblock, locusr, &modified,
-		       localsig, nonrevokesig, trustsig, interactive, 0);
+	    sign_uids (ctrl, NULL, keyblock, locusr, myflags,
+                       NULL, &my_modified);
+            if (my_modified)  /* sign_uids modified the keyblock      */
+              modified = 1;   /* thus set the general modified flag.  */
+            if (my_modified && !(myflags & SIGN_UIDS_LOCAL))
+              upload = 1;     /* exportable signature -> mark uploadable.  */
 	  }
 	  break;
 
@@ -1750,6 +1884,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	      update_trust = 1;
 	      redisplay = 1;
 	      modified = 1;
+              upload = 1;
 	      merge_keys_and_selfsig (ctrl, keyblock);
 	    }
 	  break;
@@ -1774,6 +1909,8 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 		menu_deluid (keyblock);
 		redisplay = 1;
 		modified = 1;
+                /* upload does not make sense here.  Eventually we may
+                 * decide to delete a key from the keyserver.*/
 	      }
 	  }
 	  break;
@@ -1802,6 +1939,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	    {
 	      redisplay = 1;
 	      modified = 1;
+              upload = 1;
 	      merge_keys_and_selfsig (ctrl, keyblock);
 	    }
 	  break;
@@ -1812,6 +1950,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	    {
 	      redisplay = 1;
 	      modified = 1;
+              upload = 1;
 	      merge_keys_and_selfsig (ctrl, keyblock);
 	    }
 	  break;
@@ -2011,6 +2150,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 		menu_delkey (keyblock);
 		redisplay = 1;
 		modified = 1;
+                /* upload does not make sense. */
 	      }
 	  }
 	  break;
@@ -2025,6 +2165,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	      {
 		redisplay = 1;
 		modified = 1;
+                upload = 1;
 		merge_keys_and_selfsig (ctrl, keyblock);
 	      }
 	  }
@@ -2035,6 +2176,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
             {
               redisplay = 1;
               modified = 1;
+              upload = 1;
               merge_keys_and_selfsig (ctrl, keyblock);
             }
 	  break;
@@ -2058,6 +2200,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 		  {
 		    modified = 1;
 		    redisplay = 1;
+                    upload = 1;
 		  }
 	      }
 	  }
@@ -2074,7 +2217,10 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 					     " the entire key? (y/N) ")))
 		  {
 		    if (menu_revkey (ctrl, keyblock))
-		      modified = 1;
+                      {
+                        modified = 1;
+                        upload = 1;
+                      }
 
 		    redisplay = 1;
 		  }
@@ -2087,7 +2233,10 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 						" this subkey? (y/N) ")))
 	      {
 		if (menu_revsubkey (ctrl, keyblock))
-		  modified = 1;
+                  {
+                    modified = 1;
+                    upload = 1;
+                  }
 
 		redisplay = 1;
 	      }
@@ -2103,6 +2252,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	      merge_keys_and_selfsig (ctrl, keyblock);
               run_subkey_warnings = 1;
 	      modified = 1;
+              upload = 1;
 	      redisplay = 1;
 	    }
 	  break;
@@ -2112,6 +2262,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	    {
 	      merge_keys_and_selfsig (ctrl, keyblock);
 	      modified = 1;
+              upload = 1;
 	      redisplay = 1;
 	    }
 	  break;
@@ -2120,6 +2271,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	  if (menu_backsign (ctrl, keyblock))
 	    {
 	      modified = 1;
+              upload = 1;
 	      redisplay = 1;
 	    }
 	  break;
@@ -2129,6 +2281,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	    {
 	      merge_keys_and_selfsig (ctrl, keyblock);
 	      modified = 1;
+              upload = 1;
 	      redisplay = 1;
 	    }
 	  break;
@@ -2201,6 +2354,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 		  {
 		    merge_keys_and_selfsig (ctrl, keyblock);
 		    modified = 1;
+                    upload = 1;
 		    redisplay = 1;
 		  }
 	      }
@@ -2213,6 +2367,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	    {
 	      merge_keys_and_selfsig (ctrl, keyblock);
 	      modified = 1;
+              upload = 1;
 	      redisplay = 1;
 	    }
 	  break;
@@ -2223,6 +2378,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	    {
 	      merge_keys_and_selfsig (ctrl, keyblock);
 	      modified = 1;
+              upload = 1;
 	      redisplay = 1;
 	    }
 	  break;
@@ -2235,6 +2391,7 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
 	    {
 	      redisplay = 1;
 	      modified = 1;
+              upload = 1;
 	    }
 	  break;
 
@@ -2286,6 +2443,11 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
                 {
                   log_error (_("update failed: %s\n"), gpg_strerror (err));
                   break;
+                }
+              if (upload)
+                {
+                  maybe_upload_key (ctrl, keyblock);
+                  upload = 0;
                 }
 	    }
 
@@ -2343,6 +2505,23 @@ keyedit_menu (ctrl_t ctrl, const char *username, strlist_t locusr,
   release_kbnode (keyblock);
   keydb_release (kdbhd);
   xfree (answer);
+}
+
+
+/* Helper to upload a key to an LDAP server if configured.  */
+static void
+maybe_upload_key (ctrl_t ctrl, kbnode_t keyblock)
+{
+  unsigned int saved_options;
+
+  if (!opt.flags.auto_key_upload)
+    return;
+
+  saved_options = opt.keyserver_options.options;
+  opt.keyserver_options.options |= KEYSERVER_LDAP_ONLY;
+  opt.keyserver_options.options |= KEYSERVER_WARN_ONLY;
+  keyserver_export_pubkey (ctrl, keyblock->pkt->pkt.public_key, 0);
+  opt.keyserver_options.options = saved_options;
 }
 
 
@@ -2404,6 +2583,9 @@ quick_find_keyblock (ctrl_t ctrl, const char *username, int want_secret,
       err = gpg_error_from_syserror ();
       goto leave;
     }
+  err = keydb_lock (kdbhd);
+  if (err)
+    goto leave;
 
   err = classify_user_id (username, &desc, 1);
   if (!err)
@@ -2497,7 +2679,7 @@ keyedit_quick_adduid (ctrl_t ctrl, const char *username, const char *newuid)
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
-
+      maybe_upload_key (ctrl, keyblock);
       if (update_trust)
         revalidation_mark (ctrl);
     }
@@ -2632,7 +2814,7 @@ keyedit_quick_revuid (ctrl_t ctrl, const char *username, const char *uidtorev)
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
-
+      maybe_upload_key (ctrl, keyblock);
       revalidation_mark (ctrl);
       goto leave;
     }
@@ -2698,6 +2880,7 @@ keyedit_quick_set_primary (ctrl_t ctrl, const char *username,
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
+      maybe_upload_key (ctrl, keyblock);
       revalidation_mark (ctrl);
     }
   else
@@ -2745,6 +2928,7 @@ keyedit_quick_update_pref (ctrl_t ctrl, const char *username)
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
+      maybe_upload_key (ctrl, keyblock);
     }
 
  leave:
@@ -2899,10 +3083,12 @@ find_by_primary_fpr (ctrl_t ctrl, const char *fpr,
    key are signed using the default signing key.  If UIDS is an empty
    list all usable UIDs are signed, if it is not empty, only those
    user ids matching one of the entries of the list are signed.  With
-   LOCAL being true the signatures are marked as non-exportable.  */
+   LOCAL being true the signatures are marked as non-exportable.  If
+   TRUSTSIG is given a trust signature is created; see
+   parse_trustsig_string(). */
 void
 keyedit_quick_sign (ctrl_t ctrl, const char *fpr, strlist_t uids,
-                    strlist_t locusr, int local)
+                    strlist_t locusr, const char *trustsig, int local)
 {
   gpg_error_t err = 0;
   kbnode_t keyblock = NULL;
@@ -2917,6 +3103,20 @@ keyedit_quick_sign (ctrl_t ctrl, const char *fpr, strlist_t uids,
   /* See keyedit_menu for why we need this.  */
   check_trustdb_stale (ctrl);
 #endif
+
+  /* Do an early check on an arg for an immediate error message.  */
+  if (trustsig)
+    {
+      byte trust_depth, trust_value;
+      char *trust_regexp;
+      err = parse_trustsig_string (trustsig, &trust_value,
+                                   &trust_depth, &trust_regexp);
+      xfree (trust_regexp);
+      (void)trust_depth;
+      (void)trust_value;
+      if (err)
+        goto leave;
+    }
 
   /* We require a fingerprint because only this uniquely identifies a
      key and may thus be used to select a key for unattended key
@@ -3025,8 +3225,14 @@ keyedit_quick_sign (ctrl_t ctrl, const char *fpr, strlist_t uids,
     }
 
   /* Sign. */
-  sign_uids (ctrl, es_stdout, keyblock, locusr, &modified, local, 0, 0, 0, 1);
+  err = sign_uids (ctrl, es_stdout, keyblock, locusr,
+                   (SIGN_UIDS_QUICK
+                    | (local? SIGN_UIDS_LOCAL : 0)
+                    | (trustsig? SIGN_UIDS_TRUSTSIG : 0)),
+                   trustsig, &modified);
   es_fflush (es_stdout);
+  if (err)
+    goto leave;
 
   if (modified)
     {
@@ -3036,6 +3242,8 @@ keyedit_quick_sign (ctrl_t ctrl, const char *fpr, strlist_t uids,
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
+      if (!local) /* No need to upload new non-expotable sigs.  */
+        maybe_upload_key (ctrl, keyblock);
     }
   else
     log_info (_("Key not changed so no update needed.\n"));
@@ -3045,7 +3253,10 @@ keyedit_quick_sign (ctrl_t ctrl, const char *fpr, strlist_t uids,
 
  leave:
   if (err)
-    write_status_error ("keyedit.sign-key", err);
+    {
+      log_error (_("creating key signature failed: %s\n"), gpg_strerror (err));
+      write_status_error ("keyedit.sign-key", err);
+    }
   release_kbnode (keyblock);
   keydb_release (kdbhd);
 }
@@ -3267,6 +3478,7 @@ keyedit_quick_revsig (ctrl_t ctrl, const char *username, const char *sigtorev,
       log_error (_("update failed: %s\n"), gpg_strerror (err));
       goto leave;
     }
+  maybe_upload_key (ctrl, keyblock);
   revalidation_mark (ctrl);
 
  leave:
@@ -3337,6 +3549,7 @@ keyedit_quick_addkey (ctrl_t ctrl, const char *fpr, const char *algostr,
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
+      maybe_upload_key (ctrl, keyblock);
     }
   else
     log_info (_("Key not changed so no update needed.\n"));
@@ -3413,6 +3626,7 @@ keyedit_quick_addadsk (ctrl_t ctrl, const char *fpr, const char *adskfpr)
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
+      maybe_upload_key (ctrl, keyblock);
     }
 
  leave:
@@ -3563,6 +3777,7 @@ keyedit_quick_set_expire (ctrl_t ctrl, const char *fpr, const char *expirestr,
           log_error (_("update failed: %s\n"), gpg_strerror (err));
           goto leave;
         }
+      maybe_upload_key (ctrl, keyblock);
       if (update_trust)
         revalidation_mark (ctrl);
     }
@@ -3957,7 +4172,7 @@ show_key_with_all_names (ctrl_t ctrl, estream_t fp,
                            _("The following key was revoked on"
                             " %s by %s key %s\n"),
 			  revokestr_from_pk (pk),
-                          gcry_pk_algo_name (pk->revoked.algo), user);
+                          openpgp_pk_algo_name (pk->revoked.algo), user);
 	      xfree (user);
 	    }
 
@@ -3972,14 +4187,14 @@ show_key_with_all_names (ctrl_t ctrl, estream_t fp,
 		    char *user;
 		    const char *algo;
 
-		    algo = gcry_pk_algo_name (pk->revkey[i].algid);
+		    algo = openpgp_pk_algo_name (pk->revkey[i].algid);
 		    keyid_from_fingerprint (ctrl, pk->revkey[i].fpr,
 					    pk->revkey[i].fprlen, r_keyid);
 
 		    user = get_user_id_string_native (ctrl, r_keyid);
 		    tty_fprintf (fp,
                                  _("This key may be revoked by %s key %s"),
-                                 algo ? algo : "?", user);
+                                 algo, user);
 
 		    if (pk->revkey[i].class & 0x40)
 		      {
@@ -4902,9 +5117,13 @@ fail:
 
 
 /* Core function to add an ADSK to the KEYBLOCK.  Returns 0 on success
- * or an error code.  */
+ * or an error code.  If SIGTIMESTAMP is not 0 it is used for the key
+ * binding signature creation time; if not given the current time is
+ * used.  CACHE_NONCE can be used to avoid a second Pinetry pop-up for
+ * appending the ADSK. */
 gpg_error_t
-append_adsk_to_key (ctrl_t ctrl, kbnode_t keyblock, PKT_public_key *adsk)
+append_adsk_to_key (ctrl_t ctrl, kbnode_t keyblock, PKT_public_key *adsk,
+                    u32 sigtimestamp, const char *cache_nonce)
 {
   gpg_error_t err;
   PKT_public_key *main_pk;  /* The primary key.  */
@@ -4935,8 +5154,8 @@ append_adsk_to_key (ctrl_t ctrl, kbnode_t keyblock, PKT_public_key *adsk)
 
   /* Prepare and append the adsk.  */
   keyid_from_pk (main_pk, adsk->main_keyid); /* Fixup main keyid.  */
-  log_assert ((adsk->pubkey_usage & PUBKEY_USAGE_ENC));
-  adsk->pubkey_usage = PUBKEY_USAGE_RENC;    /* 'e' -> 'r'         */
+  log_assert ((adsk->pubkey_usage & PUBKEY_USAGE_XENC_MASK));
+  adsk->pubkey_usage = PUBKEY_USAGE_RENC;    /* 'e' or 'r' -> 'r'  */
   pkt = xtrycalloc (1, sizeof *pkt);
   if (!pkt)
     {
@@ -4949,8 +5168,8 @@ append_adsk_to_key (ctrl_t ctrl, kbnode_t keyblock, PKT_public_key *adsk)
 
   /* Make the signature.  */
   err = make_keysig_packet (ctrl, &sig, main_pk, NULL, adsk, main_pk, 0x18,
-                            adsk->timestamp, 0,
-                            keygen_add_key_flags_and_expire, adsk, NULL);
+                            sigtimestamp, 0,
+                            keygen_add_key_flags_and_expire, adsk, cache_nonce);
   adsk = NULL; /* (owned by adsknode - avoid double free.)  */
   if (err)
     {
@@ -4997,6 +5216,7 @@ menu_addadsk (ctrl_t ctrl, kbnode_t pub_keyblock, const char *adskfpr)
   byte fpr[MAX_FINGERPRINT_LEN];
   size_t fprlen;
   kbnode_t node;
+  u32 sigtimestamp = make_timestamp ();
 
   log_assert (pub_keyblock->pkt->pkttype == PKT_PUBLIC_KEY);
 
@@ -5097,7 +5317,8 @@ menu_addadsk (ctrl_t ctrl, kbnode_t pub_keyblock, const char *adskfpr)
   /* Append the subkey.  */
   log_assert (node->pkt->pkttype == PKT_PUBLIC_KEY
               || node->pkt->pkttype == PKT_PUBLIC_SUBKEY);
-  err = append_adsk_to_key (ctrl, pub_keyblock, node->pkt->pkt.public_key);
+  err = append_adsk_to_key (ctrl, pub_keyblock, node->pkt->pkt.public_key,
+                            sigtimestamp, NULL);
 
 
  leave:

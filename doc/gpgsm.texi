@@ -271,7 +271,8 @@ Export the private key and the certificate identified by @var{key-id}
 using the PKCS#12 format.  When used with the @code{--armor} option a few
 informational lines are prepended to the output.  Note, that the PKCS#12
 format is not very secure and proper transport security should be used
-to convey the exported key.  (@xref{option --p12-charset}.)
+to convey the exported key.  The option @code{--no-protection} can be
+used to export without passphrase protection.  (@xref{option --p12-charset}.)
 
 @item --export-secret-key-p8 @var{key-id}
 @itemx --export-secret-key-raw @var{key-id}
@@ -290,11 +291,12 @@ Import the certificates from the PEM or binary encoded files as well as
 from signed-only messages.  This command may also be used to import a
 secret key from a PKCS#12 file.
 
-@item --learn-card
+@item --learn-card [@var{serialno}]
 @opindex learn-card
-Read information about the private keys from the smartcard and import
-the certificates from there.  This command utilizes the @command{gpg-agent}
-and in turn the @command{scdaemon}.
+Read information about the private keys from the current smartcard and import
+the certificates from there.  This command utilizes @command{gpg-agent}
+and in turn @command{scdaemon}.  If @var{serialno} is provided the
+system first makes that card the current one.
 
 @item --change-passphrase @var{user_id}
 @opindex change-passphrase
@@ -799,8 +801,8 @@ The option has an effect only on Windows.
 
 @item --debug-level @var{level}
 @opindex debug-level
-Select the debug level for investigating problems. @var{level} may be
-a numeric value or by a keyword:
+Select the debug level for investigating problems.  @var{level} may be
+a numeric value or a keyword:
 
 @table @code
 @item none
@@ -822,8 +824,9 @@ only enabled if the keyword is used.
 @end table
 
 How these messages are mapped to the actual debugging flags is not
-specified and may change with newer releases of this program. They are
-however carefully selected to best aid in debugging.
+specified and may change with newer releases of this program.  This is
+a legacy option; in general it is better to select specific debug
+flags using the @option{--debug}.
 
 @item --debug @var{flags}
 @opindex debug
@@ -887,6 +890,13 @@ are:
   Pinentry the user is not prompted again if he enters a bad password.
 @end table
 
+@item --no-protection
+@opindex no-protection
+When exporting a private key in the PKCS#12 format do not use a
+passphrase to protect the key.  Please use this option only along with
+a PKCS#12 export becuase it may eventually also have an effect for
+other commands.
+
 @item --request-origin @var{origin}
 @opindex request-origin
 Tell gpgsm to assume that the operation ultimately originated at
@@ -899,6 +909,12 @@ operation requested by a web browser.
 @item --no-common-certs-import
 @opindex no-common-certs-import
 Suppress the import of common certificates on keybox creation.
+
+
+@item --no-qes-note
+@opindex no-qes-note
+Do not print notices that ``this software is not officially approved
+to create or verify QES signatures''.
 
 @end table
 
@@ -966,16 +982,20 @@ like this:
 
 @item qualified.txt
 @efindex qualified.txt
-This is the list of root certificates used for qualified certificates.
-They are defined as certificates capable of creating legally binding
-signatures in the same way as handwritten signatures are.  Comments
-start with a hash mark and empty lines are ignored.  Lines do have a
-length limit but this is not a serious limitation as the format of the
-entries is fixed and checked by @command{gpgsm}: A non-comment line starts with
-optional whitespace, followed by exactly 40 hex characters, white space
-and a lowercased 2 letter country code.  Additional data delimited with
-by a white space is current ignored but might late be used for other
-purposes.
+This is the legacy method to mark root certificates as usable for
+qualified certificates.  Qualified certificates are capable of
+creating legally binding signatures in the same way as handwritten
+signatures (QES).  The modern method to mark such root certificates is
+to use the "qual" flag in the system trustlist.txt; see the gpg-agent
+man page for details.
+
+Comments int his file start with a hash mark and empty lines are
+ignored.  Lines do have a length limit but this is not a serious
+limitation as the format of the entries is fixed and checked by
+@command{gpgsm}: A non-comment line starts with optional whitespace,
+followed by exactly 40 hex characters, white space and a lowercased 2
+letter country code.  Additional data delimited with by a white space
+is current ignored but might late be used for other purposes.
 
 Note that even if a certificate is listed in this file, this does not
 mean that the certificate is trusted; in general the certificates listed
@@ -1174,6 +1194,9 @@ Print @var{text} as diagnostic.
 
 @item %dry-run
 Suppress actual key generation (useful for syntax checking).
+
+@item %no-protection
+Creates the private key without a passphrase.
 
 @item %commit
 Perform the key generation.  Note that an implicit commit is done at
@@ -1776,6 +1799,11 @@ encrypt operation.  Note that this option is ignored if
 
 @item input-size-hint
 This is the same as the @option{--input-size-hint} command line option.
+
+@item no-protection
+If @var{value} is true exported keys are not protected by a
+passphrase.  This can be reset with a value of 0 or a RESET command.
+This is the same as the command line option @option{--no-protection}.
 
 @end table
 

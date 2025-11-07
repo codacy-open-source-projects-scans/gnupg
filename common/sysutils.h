@@ -90,6 +90,7 @@ FILE *gnupg_tmpfile (void);
 void gnupg_reopen_std (const char *pgmname);
 void gnupg_inhibit_set_foregound_window (int yes);
 void gnupg_allow_set_foregound_window (pid_t pid);
+int  gnupg_remove_ext (const char *fname, int wait_for_access);
 int  gnupg_remove (const char *fname);
 gpg_error_t gnupg_rename_file (const char *oldname, const char *newname,
                                int *block_signals);
@@ -120,6 +121,8 @@ gpg_error_t gnupg_inotify_watch_socket (int *r_fd, const char *socket_name);
 int gnupg_inotify_has_name (int fd, const char *name);
 
 estream_t open_stream_nc (gnupg_fd_t fd, const char *mode);
+
+void output_debug_string (const char *format, ...) GPGRT_ATTR_PRINTF(1,2);
 
 #ifdef HAVE_W32_SYSTEM
 int gnupg_w32_set_errno (int ec);

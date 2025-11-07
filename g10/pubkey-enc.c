@@ -38,7 +38,7 @@
 #include "../common/compliance.h"
 
 
-static gpg_error_t get_it (ctrl_t ctrl, struct pubkey_enc_list *k,
+static gpg_error_t get_it (ctrl_t ctrl, struct seskey_enc_list *k,
                            DEK *dek, PKT_public_key *sk, u32 *keyid);
 
 
@@ -72,14 +72,14 @@ is_algo_in_prefs (kbnode_t keyblock, preftype_t type, int algo)
  * which should have been allocated in secure memory by the caller.
  */
 gpg_error_t
-get_session_key (ctrl_t ctrl, struct pubkey_enc_list *list, DEK *dek)
+get_session_key (ctrl_t ctrl, struct seskey_enc_list *list, DEK *dek)
 {
   PKT_public_key *sk = NULL;
   gpg_error_t err;
   void *enum_context = NULL;
   u32 keyid[2];
   int search_for_secret_keys = 1;
-  struct pubkey_enc_list *k;
+  struct seskey_enc_list *k;
 
   if (DBG_CLOCK)
     log_clock ("get_session_key enter");
@@ -115,23 +115,25 @@ get_session_key (ctrl_t ctrl, struct pubkey_enc_list *list, DEK *dek)
        */
       for (k = list; k; k = k->next)
         {
-          if (!(k->d.pubkey_algo == PUBKEY_ALGO_ELGAMAL_E
-                || k->d.pubkey_algo == PUBKEY_ALGO_ECDH
-                || k->d.pubkey_algo == PUBKEY_ALGO_KYBER
-                || k->d.pubkey_algo == PUBKEY_ALGO_RSA
-                || k->d.pubkey_algo == PUBKEY_ALGO_RSA_E
-                || k->d.pubkey_algo == PUBKEY_ALGO_ELGAMAL))
+          if (k->u_sym)
+            continue;
+          if (!(k->u.pub.pubkey_algo == PUBKEY_ALGO_ELGAMAL_E
+                || k->u.pub.pubkey_algo == PUBKEY_ALGO_ECDH
+                || k->u.pub.pubkey_algo == PUBKEY_ALGO_KYBER
+                || k->u.pub.pubkey_algo == PUBKEY_ALGO_RSA
+                || k->u.pub.pubkey_algo == PUBKEY_ALGO_RSA_E
+                || k->u.pub.pubkey_algo == PUBKEY_ALGO_ELGAMAL))
             continue;
 
-          if (openpgp_pk_test_algo2 (k->d.pubkey_algo, PUBKEY_USAGE_ENC))
+          if (openpgp_pk_test_algo2 (k->u.pub.pubkey_algo, PUBKEY_USAGE_ENC))
             continue;
 
-          if (sk->pubkey_algo != k->d.pubkey_algo)
+          if (sk->pubkey_algo != k->u.pub.pubkey_algo)
             continue;
 
           keyid_from_pk (sk, keyid);
 
-          if (!k->d.keyid[0] && !k->d.keyid[1])
+          if (!k->u.pub.keyid[0] && !k->u.pub.keyid[1])
             {
               if (opt.skip_hidden_recipients)
                 continue;
@@ -141,7 +143,8 @@ get_session_key (ctrl_t ctrl, struct pubkey_enc_list *list, DEK *dek)
                           keystr (keyid));
             }
           else if (opt.try_all_secrets
-                   || (k->d.keyid[0] == keyid[0] && k->d.keyid[1] == keyid[1]))
+                   || (k->u.pub.keyid[0] == keyid[0]
+                       && k->u.pub.keyid[1] == keyid[1]))
             {
               if (!opt.quiet && !(sk->pubkey_usage & PUBKEY_USAGE_XENC_MASK))
                 log_info (_("used key is not marked for encryption use.\n"));
@@ -153,7 +156,7 @@ get_session_key (ctrl_t ctrl, struct pubkey_enc_list *list, DEK *dek)
           k->result = err;
           if (!err)
             {
-              if (!opt.quiet && !k->d.keyid[0] && !k->d.keyid[1])
+              if (!opt.quiet && !k->u.pub.keyid[0] && !k->u.pub.keyid[1])
                 {
                   log_info (_("okay, we are the anonymous recipient.\n"));
                   if (!(sk->pubkey_usage & PUBKEY_USAGE_XENC_MASK))
@@ -188,9 +191,48 @@ get_session_key (ctrl_t ctrl, struct pubkey_enc_list *list, DEK *dek)
 }
 
 
+/* Build an SEXP to gpg-agent, for PKDECRYPT command.  */
+static gpg_error_t
+ecdh_sexp_build (gcry_sexp_t *r_s_data, struct seskey_enc_list *enc,
+                 PKT_public_key *sk)
+{
+  gpg_error_t err;
+  const unsigned char *kdf_params_spec;
+  byte fp[MAX_FINGERPRINT_LEN];
+  int keywrap_cipher_algo;
+  int kdf_hash_algo;
+  unsigned char *kdf_params = NULL;
+  size_t kdf_params_len = 0;
+
+  fingerprint_from_pk (sk, fp, NULL);
+
+  err = ecc_build_kdf_params (&kdf_params, &kdf_params_len,
+                              &kdf_params_spec, sk->pkey, fp);
+  if (err)
+    return err;
+
+  keywrap_cipher_algo = kdf_params_spec[3];
+  kdf_hash_algo = kdf_params_spec[2];
+
+  if (!enc->u.pub.data[0] || !enc->u.pub.data[1])
+    {
+      xfree (kdf_params);
+      return gpg_error (GPG_ERR_BAD_MPI);
+    }
+
+  err = gcry_sexp_build (r_s_data, NULL,
+                         "(enc-val(ecc(c%d)(h%d)(e%m)(s%m)(kdf-params%b)))",
+                         keywrap_cipher_algo, kdf_hash_algo,
+                         enc->u.pub.data[0], enc->u.pub.data[1],
+                         (int)kdf_params_len, kdf_params);
+  xfree (kdf_params);
+  return err;
+}
+
+
 static gpg_error_t
 get_it (ctrl_t ctrl,
-        struct pubkey_enc_list *enc, DEK *dek, PKT_public_key *sk, u32 *keyid)
+        struct seskey_enc_list *enc, DEK *dek, PKT_public_key *sk, u32 *keyid)
 {
   gpg_error_t err;
   byte *frame = NULL;
@@ -201,10 +243,11 @@ get_it (ctrl_t ctrl,
   gcry_sexp_t s_data;
   char *desc;
   char *keygrip;
-  byte fp[MAX_FINGERPRINT_LEN];
 
   if (DBG_CLOCK)
     log_clock ("decryption start");
+
+  log_assert (!enc->u_sym);
 
   /* Get the keygrip.  */
   err = hexkeygrip_from_pk (sk, &keygrip);
@@ -215,29 +258,23 @@ get_it (ctrl_t ctrl,
   if (sk->pubkey_algo == PUBKEY_ALGO_ELGAMAL
       || sk->pubkey_algo == PUBKEY_ALGO_ELGAMAL_E)
     {
-      if (!enc->d.data[0] || !enc->d.data[1])
+      if (!enc->u.pub.data[0] || !enc->u.pub.data[1])
         err = gpg_error (GPG_ERR_BAD_MPI);
       else
         err = gcry_sexp_build (&s_data, NULL, "(enc-val(elg(a%m)(b%m)))",
-                               enc->d.data[0], enc->d.data[1]);
+                               enc->u.pub.data[0], enc->u.pub.data[1]);
     }
   else if (sk->pubkey_algo == PUBKEY_ALGO_RSA
            || sk->pubkey_algo == PUBKEY_ALGO_RSA_E)
     {
-      if (!enc->d.data[0])
+      if (!enc->u.pub.data[0])
         err = gpg_error (GPG_ERR_BAD_MPI);
       else
         err = gcry_sexp_build (&s_data, NULL, "(enc-val(rsa(a%m)))",
-                               enc->d.data[0]);
+                               enc->u.pub.data[0]);
     }
   else if (sk->pubkey_algo == PUBKEY_ALGO_ECDH)
-    {
-      if (!enc->d.data[0] || !enc->d.data[1])
-        err = gpg_error (GPG_ERR_BAD_MPI);
-      else
-        err = gcry_sexp_build (&s_data, NULL, "(enc-val(ecdh(s%m)(e%m)))",
-                               enc->d.data[1], enc->d.data[0]);
-    }
+    err = ecdh_sexp_build (&s_data, enc, sk);
   else if (sk->pubkey_algo == PUBKEY_ALGO_KYBER)
     {
       char fixedinfo[1+MAX_FINGERPRINT_LEN];
@@ -251,27 +288,26 @@ get_it (ctrl_t ctrl,
         }
       else
         {
-          fixedinfo[0] = enc->d.seskey_algo;
+          fixedinfo[0] = enc->u.pub.seskey_algo;
           v5_fingerprint_from_pk (sk, fixedinfo+1, NULL);
           fixedlen = 33;
         }
 
-      if (!enc->d.data[0] || !enc->d.data[1] || !enc->d.data[2])
+      if (!enc->u.pub.data[0] || !enc->u.pub.data[1] || !enc->u.pub.data[2])
         err = gpg_error (GPG_ERR_BAD_MPI);
       else
         err = gcry_sexp_build (&s_data, NULL,
                            "(enc-val(pqc(e%m)(k%m)(s%m)(c%d)(fixed-info%b)))",
-                           enc->d.data[0], enc->d.data[1], enc->d.data[2],
-                           enc->d.seskey_algo, fixedlen, fixedinfo);
+                               enc->u.pub.data[0],
+                               enc->u.pub.data[1],
+                               enc->u.pub.data[2],
+                               enc->u.pub.seskey_algo, fixedlen, fixedinfo);
     }
   else
     err = gpg_error (GPG_ERR_BUG);
 
   if (err)
     goto leave;
-
-  if (sk->pubkey_algo == PUBKEY_ALGO_ECDH)
-    fingerprint_from_pk (sk, fp, NULL);
 
   /* Decrypt. */
   desc = gpg_format_keydesc (ctrl, sk, FORMAT_KEYDESC_NORMAL, 1);
@@ -307,35 +343,15 @@ get_it (ctrl_t ctrl,
 
   if (sk->pubkey_algo == PUBKEY_ALGO_KYBER)
     {
-      /* We expect a 32 byte session key.  We should not see this
-       * error here because due to the KEM mode the agent_pkdecrypt
-       * should have already failed.  */
-      if (nframe != 32)
+      if (nframe != 32 && opt.flags.require_pqc_encryption)
         {
-          err = gpg_error (GPG_ERR_WRONG_SECKEY);
-          goto leave;
+          log_info (_("WARNING: session key is not quantum-resistant\n"));
         }
       dek->keylen = nframe;
-      dek->algo = enc->d.seskey_algo;
+      dek->algo = enc->u.pub.seskey_algo;
     }
   else if (sk->pubkey_algo == PUBKEY_ALGO_ECDH)
     {
-      gcry_mpi_t decoded;
-
-      /* At the beginning the frame are the bytes of shared point MPI.  */
-      err = pk_ecdh_decrypt (&decoded, fp,
-                             enc->d.data[1], /*encr data as an MPI*/
-                             frame, nframe,
-                             sk->pkey);
-      if(err)
-        goto leave;
-
-      xfree (frame);
-      err = gcry_mpi_aprint (GCRYMPI_FMT_USG, &frame, &nframe, decoded);
-      mpi_release (decoded);
-      if (err)
-        goto leave;
-
       /* Now the frame are the bytes decrypted but padded session key.  */
       if (!nframe || nframe <= 8
           || frame[nframe-1] > nframe)
@@ -449,8 +465,8 @@ get_it (ctrl_t ctrl,
 
     if (!pkb)
       {
-        err = -1;
-        log_error ("oops: public key not found for preference check\n");
+        err = gpg_error (GPG_ERR_UNEXPECTED);
+        log_info ("oops: public key not found for preference check\n");
       }
     else if (pkb->pkt->pkt.public_key->selfsigversion > 3
              && dek->algo != CIPHER_ALGO_3DES

@@ -39,11 +39,7 @@
  * libgpg-error version.  Define them here.
  * Example: (#if GPG_ERROR_VERSION_NUMBER < 0x011500 // 1.21)
  */
-#if GPG_ERROR_VERSION_NUMBER < 0x012f00 /* 1.47 */
-# define GPG_ERR_BAD_PUK          320
-# define GPG_ERR_NO_RESET_CODE    321
-# define GPG_ERR_BAD_RESET_CODE   322
-#endif
+
 
 #ifndef EXTERN_UNLESS_MAIN_MODULE
 # if !defined (INCLUDED_BY_MAIN_MODULE)
@@ -228,7 +224,6 @@ int openpgp_oidbuf_is_cv25519 (const void *buf, size_t len);
 int openpgp_oid_is_cv25519 (gcry_mpi_t a);
 int openpgp_oid_is_cv448 (gcry_mpi_t a);
 int openpgp_oid_is_ed448 (gcry_mpi_t a);
-enum gcry_kem_algos openpgp_oid_to_kem_algo (const char *oidname);
 const char *openpgp_curve_to_oid (const char *name,
                                   unsigned int *r_nbits, int *r_algo,
                                   int selector);
@@ -242,6 +237,13 @@ const char *get_keyalgo_string (enum gcry_pk_algos algo,
 
 
 /*-- homedir.c --*/
+#ifdef HAVE_W32_SYSTEM
+int gnupg_isatty (int fd);
+extern int windows_semihosted_by_wine;
+#else
+#define gnupg_isatty(a)  isatty ((a))
+#endif
+
 const char *standard_homedir (void);
 void gnupg_set_homedir (const char *newdir);
 void gnupg_maybe_make_homedir (const char *fname, int quiet);
@@ -297,16 +299,35 @@ void gnupg_set_builddir (const char *newdir);
 void gnupg_rl_initialize (void);
 
 /*-- helpfile.c --*/
+
+/* Bit flags for gnupg_get_template.  */
+#define GET_TEMPLATE_CURRENT_LOCALE 1 /* Use only the current locale.       */
+#define GET_TEMPLATE_SUBST_ENVVARS  2 /* Substitute environment variables.  */
+#define GET_TEMPLATE_CRLF           4 /* Use CR+LF.                         */
+
+char *gnupg_get_template (const char *domain, const char *key,
+                          unsigned int flags, const char *override_locale);
 char *gnupg_get_help_string (const char *key, int only_current_locale);
 
 /*-- localename.c --*/
 const char *gnupg_messages_locale_name (void);
 
 /*-- kem.c --*/
-gpg_error_t gnupg_ecc_kem_kdf (void *kek, size_t kek_len,
+gpg_error_t
+gpgsm_ecc_kem_kdf (void *kek, size_t kek_len,
+                   int hashalgo, const void *ecdh, size_t ecdh_len,
+                   const unsigned char *wrap, size_t wrap_len,
+                   const unsigned char *ukm, size_t ukm_len);
+
+gpg_error_t gnupg_ecc_kem_kdf (void *kek, size_t kek_len, int is_pgp,
                                int hashalgo, const void *ecdh, size_t ecdh_len,
-                               const void *ecc_ct, size_t ecc_ct_len,
-                               const void *ecc_pk, size_t ecc_pk_len);
+                               const unsigned char *kdf_params,
+                               size_t kdf_params_len);
+
+gpg_error_t gnupg_ecc_kem_simple_kdf (void *kek, size_t kek_len, int hashalgo,
+                                      const void *ecdh, size_t ecdh_len,
+                                      const void *ecc_ct, size_t ecc_ct_len,
+                                      const void *ecc_pk, size_t ecc_pk_len);
 
 gpg_error_t gnupg_kem_combiner  (void *kek, size_t kek_len,
                                  const void *ecc_ss, size_t ecc_ss_len,
@@ -314,6 +335,28 @@ gpg_error_t gnupg_kem_combiner  (void *kek, size_t kek_len,
                                  const void *mlkem_ss, size_t mlkem_ss_len,
                                  const void *mlkem_ct, size_t mlkem_ct_len,
                                  const void *fixedinfo, size_t fixedinfo_len);
+
+/* ECC parameters for KEM encryption/decryption.  */
+struct gnupg_ecc_params
+{
+  const char *curve;      /* Canonical name of the curve.  */
+  size_t pubkey_len;      /* Pubkey length in the SEXP representation.  */
+  size_t scalar_len;
+  size_t point_len;
+  int hash_algo;          /* Hash algo when it's used for composite KEM.  */
+  int kem_algo;
+  int scalar_reverse;     /* Byte-oder is reverse.  */
+  int may_have_prefix;    /* Point representation may have prefix.  */
+  int is_weierstrauss;    /* True if it is Weierstrass curve.  */
+};
+
+const struct gnupg_ecc_params *gnupg_get_ecc_params (const char *curve);
+
+/* Maximum buffer sizes required for ECC KEM.  */
+#define ECC_SCALAR_LEN_MAX 66
+#define ECC_POINT_LEN_MAX (1+2*ECC_SCALAR_LEN_MAX)
+#define ECC_HASH_LEN_MAX 64
+
 
 /*-- miscellaneous.c --*/
 
@@ -396,8 +439,6 @@ _gnupg_ttyname (int fd)
 #else /*HAVE_TTYNAME*/
 # define gnupg_ttyname(n) ttyname ((n))
 #endif /*HAVE_TTYNAME */
-
-#define gnupg_isatty(a)  isatty ((a))
 
 
 /*-- Macros to replace ctype ones to avoid locale problems. --*/

@@ -548,6 +548,11 @@ msgstr "zkouší se ukrást socket z běžícího programu %s\n"
 msgid "a gpg-agent is already running - not starting a new one\n"
 msgstr "gpg-agent již běží – nový nebude spuštěn\n"
 
+#, fuzzy, c-format
+#| msgid "key %s: removed multiple subkey binding\n"
+msgid "socket file removed - retrying binding\n"
+msgstr "klíč %s: smazána vícenásobná vazba podklíče\n"
+
 #, c-format
 msgid "error getting nonce for the socket\n"
 msgstr "chyba při získávání soli pro socket\n"
@@ -776,6 +781,11 @@ msgstr "Změnit heslo"
 
 msgid "I'll change it later"
 msgstr "Změním jej později"
+
+#, fuzzy, c-format
+#| msgid "receiving line failed: %s\n"
+msgid "Unprotecting key failed: %s\n"
+msgstr "přijímání řádku se nezdařilo: %s\n"
 
 msgid "Please insert the card with serial number"
 msgstr "Prosím, vložte kartu se sériovým číslem"
@@ -1405,6 +1415,16 @@ msgstr "vyžadováno"
 msgid "Please try command \"%s\" if the listing does not look correct\n"
 msgstr "Pokud výpis nevypadá v pořádku, zkuste příkaz „%s“\n"
 
+#, c-format
+msgid ""
+"Please note that the factory settings of the PINs are\n"
+"   PIN = '%s'     Admin PIN = '%s'\n"
+"You should change them using the command --change-pin\n"
+msgstr ""
+"Prosím nezapomeňte, že tovární nastavení PINů je\n"
+"   PIN = „%s“     PIN správce = „%s“\n"
+"Měli byste je změnit příkazem --change-pin\n"
+
 msgid "Error: Only plain ASCII is currently allowed.\n"
 msgstr "Chyba: V současné verzi je povolenou pouze plain ASCII.\n"
 
@@ -1558,16 +1578,6 @@ msgstr "Poznámka: na kartě jsou již klíče uloženy!\n"
 msgid "Replace existing keys? (y/N) "
 msgstr "Přepsat existující klíče? (a/N) "
 
-#, c-format
-msgid ""
-"Please note that the factory settings of the PINs are\n"
-"   PIN = '%s'     Admin PIN = '%s'\n"
-"You should change them using the command --change-pin\n"
-msgstr ""
-"Prosím nezapomeňte, že tovární nastavení PINů je\n"
-"   PIN = „%s“     PIN správce = „%s“\n"
-"Měli byste je změnit příkazem --change-pin\n"
-
 msgid "Please select the type of key to generate:\n"
 msgstr "Prosím, vyberte druh klíče, který chcete generovat:\n"
 
@@ -1689,7 +1699,7 @@ msgstr "Neplatný příkaz (zkuste „help“)\n"
 
 #, fuzzy, c-format
 #| msgid "key operation not possible: %s\n"
-msgid "modifiying the recipients is not possible: %s\n"
+msgid "modifying the recipients is not possible: %s\n"
 msgstr "operace s klíčem není možná: %s\n"
 
 #, fuzzy
@@ -1849,6 +1859,11 @@ msgstr "Počet příjemců"
 #, c-format
 msgid "option '%s' may not be used in %s mode\n"
 msgstr "volba „%s“ se nesmí používat v režimu %s\n"
+
+#, fuzzy, c-format
+#| msgid "can't encrypt to '%s'\n"
+msgid "already encrypted to %08lX\n"
+msgstr "nelze zašifrovat pro „%s“\n"
 
 #, c-format
 msgid "%s encrypted data\n"
@@ -2034,6 +2049,11 @@ msgstr "rychle podepsat klíč"
 
 msgid "quickly sign a key locally"
 msgstr "rychle lokálně podepsat klíč"
+
+#, fuzzy
+#| msgid "sign selected user IDs with a trust signature"
+msgid "quickly sign a key with a trust signature"
+msgstr "podepsat vybrané uživatelské ID důvěryhodným podpisem"
 
 msgid "quickly revoke a key signature"
 msgstr "rychle odvolat podpis klíče"
@@ -2338,6 +2358,11 @@ msgstr "vypsat předvolby"
 #| msgid "change the ownertrust"
 msgid "show ownertrust"
 msgstr "změnit důvěryhodnost vlastníka klíče"
+
+#, fuzzy
+#| msgid "Unknown critical signature notation: "
+msgid "show trust signature information"
+msgstr "Neznámá kritická notace podpisu: "
 
 #, c-format
 msgid "unknown TOFU policy '%s'\n"
@@ -2672,6 +2697,9 @@ msgstr "|FD|zapsat informace o stavu do tohoto FD"
 msgid "|ALGO|reject signatures made with ALGO"
 msgstr "|ALGORITMUS|zamítnout podpisy založené na ALGORITMU"
 
+msgid "|NAME|print the notation NAME to stdout"
+msgstr ""
+
 msgid "Usage: gpgv [options] [files] (-h for help)"
 msgstr "Použití: gpg [volby] [soubory] (-h pro pomoc)"
 
@@ -2730,6 +2758,11 @@ msgstr "předpokládat vstup ve formátu zálohy klíčů GnuPG"
 
 msgid "repair keys on import"
 msgstr "při importu opravit klíče"
+
+#, fuzzy
+#| msgid "list secret keys"
+msgid "do not import secret keys"
+msgstr "vypsat seznam tajných klíčů"
 
 #, c-format
 msgid "skipping block of type %d\n"
@@ -2994,10 +3027,6 @@ msgstr "Identifikátor uživatele již neplatí"
 #, c-format
 msgid "reason for revocation: "
 msgstr "důvod pro revokaci: "
-
-#, c-format
-msgid "revocation comment: "
-msgstr "revokační poznámka: "
 
 #, c-format
 msgid "key %s: no public key - can't apply revocation certificate\n"
@@ -3687,6 +3716,11 @@ msgstr "Žádný identifikátor uživatele neodpovídá."
 msgid "Nothing to sign.\n"
 msgstr "Nic na podepsání.\n"
 
+#, fuzzy, c-format
+#| msgid "revoking the key signature failed: %s\n"
+msgid "creating key signature failed: %s\n"
+msgstr "odvolat podpis klíče se nepodařilo: %s\n"
+
 #, c-format
 msgid "Not signed by you.\n"
 msgstr "Nepodepsáno vámi.\n"
@@ -4200,6 +4234,11 @@ msgid "  (%d) Existing key from card%s\n"
 msgstr "  (%d) Klíč existující na kartě%s\n"
 
 #, fuzzy, c-format
+#| msgid "   (%d) ECC and ECC\n"
+msgid "  (%d) ECC and Kyber%s\n"
+msgstr "   (%d) ECC a ECC\n"
+
+#, fuzzy, c-format
 #| msgid "  (%d) ECC (encrypt only)%s\n"
 msgid "  (%d) Kyber (encrypt only)%s\n"
 msgstr "  (%d) ECC (pouze pro šifrování)%s\n"
@@ -4243,6 +4282,11 @@ msgstr "Požadovaná délka klíče je %u bitů.\n"
 
 msgid "Please select which elliptic curve you want:\n"
 msgstr "Prosím, vyberte, kterou eliptickou křivku chcete:\n"
+
+#, fuzzy, c-format
+#| msgid "Please select what kind of key you want:\n"
+msgid "Please select the %s variant you want:\n"
+msgstr "Prosím, vyberte druh klíče, který chcete:\n"
 
 msgid ""
 "Please specify how long the key should be valid.\n"
@@ -4470,6 +4514,12 @@ msgstr "záložní soubor „%s“ nelze vytvořit: %s\n"
 msgid "Note: backup of card key saved to '%s'\n"
 msgstr "Poznámka: záloha klíče z karty uložena do „%s“\n"
 
+msgid ""
+"Warning: Although the key has been written to the card, a backup file was\n"
+"         not properly written to the disk.  You may want to repeat the\n"
+"         entire operation or just create a new encryption key on the card.\n"
+msgstr ""
+
 #, c-format
 msgid "writing public key to '%s'\n"
 msgstr "veřejný klíč se zapisuje do „%s“\n"
@@ -4580,6 +4630,10 @@ msgstr[2] "Pozor: %lu klíčů přeskočeno kvůli jejich přílišné velikosti
 msgid "Keyring"
 msgstr "Soubor klíčů (keyring)"
 
+#, c-format
+msgid "revocation comment: "
+msgstr "revokační poznámka: "
+
 msgid "Revocable by: "
 msgstr ""
 
@@ -4654,6 +4708,9 @@ msgstr "automaticky získávat klíče při ověřování podpisů"
 msgid "honor the preferred keyserver URL set on the key"
 msgstr "respektovat URL upřednostňovaných serverů klíčů daného klíče"
 
+msgid "update a key before sending it"
+msgstr ""
+
 msgid "disabled"
 msgstr "zneplatněn"
 
@@ -4667,6 +4724,11 @@ msgstr "neplatný protokol serveru klíčů (naše %d!=obsluha %d)\n"
 #, c-format
 msgid "\"%s\" not a key ID: skipping\n"
 msgstr "„%s“ není ID klíče: přeskočeno\n"
+
+#, fuzzy, c-format
+#| msgid "\"%s\" is not a fingerprint\n"
+msgid "\"%s\" not a fingerprint: skipping\n"
+msgstr "„%s“ není otisk\n"
 
 #, c-format
 msgid "refreshing %d key from %s\n"
@@ -4694,6 +4756,10 @@ msgstr "požaduji klíč %s z %s\n"
 #, c-format
 msgid "no keyserver known\n"
 msgstr "není znám žádný server s klíči\n"
+
+#, c-format
+msgid "upload skipped due to non-LDAP keyserver\n"
+msgstr ""
 
 #, c-format
 msgid "skipped \"%s\": %s\n"
@@ -5024,6 +5090,11 @@ msgstr "nezkomprimováno|nic"
 #, c-format
 msgid "this message may not be usable by %s\n"
 msgstr "tato zpráva nemusí být s %s použitelná\n"
+
+#, fuzzy
+#| msgid "enable key"
+msgid "enabled"
+msgstr "nastavit klíč jako platný (enable)"
 
 #, c-format
 msgid "ambiguous option '%s'\n"
@@ -5506,6 +5577,11 @@ msgstr "použitý klíč nemá vyznačeno použití pro šifrování.\n"
 #, c-format
 msgid "okay, we are the anonymous recipient.\n"
 msgstr "dobrá, my jsme anonymní adresát.\n"
+
+#, fuzzy, c-format
+#| msgid "WARNING: signing subkey %s is not cross-certified\n"
+msgid "WARNING: session key is not quantum-resistant\n"
+msgstr "POZOR: podepisovací podklíč %s není křížově certifikován\n"
 
 #, c-format
 msgid "old encoding of the DEK is not supported\n"
@@ -6397,13 +6473,19 @@ msgstr[0] " (vymazáno %d počítadlo platnosti)\n"
 msgstr[1] " (vymazána %d počítadla platnosti)\n"
 msgstr[2] " (vymazáno %d počítadel platnosti)\n"
 
-#, c-format
-msgid "no ultimately trusted keys found\n"
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s not found\n"
+msgstr "žádný absolutně důvěryhodný klíč nebyl nalezen\n"
+
+#, fuzzy, c-format
+#| msgid "no ultimately trusted keys found\n"
+msgid "Note: ultimately trusted key %s expired\n"
 msgstr "žádný absolutně důvěryhodný klíč nebyl nalezen\n"
 
 #, c-format
-msgid "public key of ultimately trusted key %s not found\n"
-msgstr "veřejný klíč k absolutně důvěryhodnému klíči %s nebyl nalezen\n"
+msgid "no ultimately trusted keys found\n"
+msgstr "žádný absolutně důvěryhodný klíč nebyl nalezen\n"
 
 #, c-format
 msgid ""
@@ -7547,9 +7629,10 @@ msgstr "chyba při ukládání příznaků: %s\n"
 msgid "Error - "
 msgstr "Chyba – "
 
-#, c-format
-msgid "GPG_TTY has not been set - using maybe bogus default\n"
-msgstr "GPG_TTY nebyla nastavena – použiji možná chybnou implicitní hodnotu\n"
+#, fuzzy, c-format
+#| msgid "error writing to stdout: %s\n"
+msgid "error writing to output: %s\n"
+msgstr "chyba při zápisu na standardní výstup: %s\n"
 
 #, c-format
 msgid "invalid formatted fingerprint in '%s', line %d\n"
@@ -9020,6 +9103,15 @@ msgid "manage the command history"
 msgstr "spravuje historii příkazů"
 
 #, c-format
+#~ msgid "GPG_TTY has not been set - using maybe bogus default\n"
+#~ msgstr ""
+#~ "GPG_TTY nebyla nastavena – použiji možná chybnou implicitní hodnotu\n"
+
+#, c-format
+#~ msgid "public key of ultimately trusted key %s not found\n"
+#~ msgstr "veřejný klíč k absolutně důvěryhodnému klíči %s nebyl nalezen\n"
+
+#, c-format
 #~ msgid "waiting for process %d to terminate failed: %s\n"
 #~ msgstr "čekání na konec procesu %d se nezdařilo: %s\n"
 
@@ -9169,9 +9261,6 @@ msgstr "spravuje historii příkazů"
 
 #~ msgid "elevate the trust of signatures with valid PKA data"
 #~ msgstr "vyzvednout důvěru podpisů s platnými daty PKA"
-
-#~ msgid "   (%d) ECC and ECC\n"
-#~ msgstr "   (%d) ECC a ECC\n"
 
 #~ msgid "honor the PKA record set on a key when retrieving keys"
 #~ msgstr "respektovat PKA záznamy klíče při získávání klíčů"
