@@ -3079,6 +3079,7 @@ parse_key (IOBUF inp, int pkttype, unsigned long pktlen,
               if (mpi_print_mode)
                 {
                   char *tmpsxp = canon_sexp_to_string (tmpp, pktlen);
+
                   es_fprintf (listfp, "\tskey[%d]: %s\n", npkey,
                               tmpsxp? trim_trailing_spaces (tmpsxp)
                               /*  */: "[invalid S-expression]");
