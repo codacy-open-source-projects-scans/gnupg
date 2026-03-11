@@ -2744,6 +2744,11 @@ verify_a_chv (app_t app, ctrl_t ctrl,
   remaining = get_remaining_tries (app, 0);
   if (remaining == -1)
     return gpg_error (GPG_ERR_CARD);
+  if (!remaining)
+    {
+      log_info (_("card is permanently locked!\n"));
+      return gpg_error (GPG_ERR_PIN_BLOCKED);
+    }
 
   if (chvno == 2 && app->app_local->flags.def_chv2)
     {
@@ -3510,7 +3515,19 @@ do_change_pin (app_t app, ctrl_t ctrl,  const char *chvnostr,
                   prompt = promptbuf;
                 }
               else
-                prompt = _("||Please enter the PIN");
+                {
+                  int remaining;
+
+                  remaining = get_remaining_tries (app, 0);
+                  if (remaining == -1)
+                    return gpg_error (GPG_ERR_CARD);
+                  if (!remaining)
+                    {
+                      log_info (_("card is permanently locked!\n"));
+                      return gpg_error (GPG_ERR_PIN_BLOCKED);
+                    }
+                  prompt = _("||Please enter the PIN");
+                }
               rc = pincb (pincb_arg, prompt, &oldpinvalue);
               xfree (promptbuf);
               promptbuf = NULL;
@@ -3668,6 +3685,9 @@ do_change_pin (app_t app, ctrl_t ctrl,  const char *chvnostr,
       wipe_and_free (result1, resultlen1);
       wipe_and_free (result2, resultlen2);
       wipe_and_free (buffer, bufferlen);
+
+      if (gpg_err_code (rc) == GPG_ERR_BAD_PIN)
+        rc = gpg_error (GPG_ERR_BAD_RESET_CODE);
     }
   else if (set_resetcode)
     {
