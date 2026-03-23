@@ -115,7 +115,8 @@ struct
   int def_cipher_algo;
   int force_mdc;
   int disable_mdc;
-  int force_aead;
+  int force_ocb;
+  int use_ocb_sym;
   int def_digest_algo;
   int cert_digest_algo;
   int compress_algo;
